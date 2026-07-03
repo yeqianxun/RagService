@@ -1,2 +1,17 @@
 /node_modules
 Front/node_modules
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+.venv-backup/
+__pycache__/
+*.so
+.Python
+.DS_Store
+.vscode
+.idea
