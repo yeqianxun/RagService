@@ -1,13 +1,10 @@
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
+import bcrypt as _bcrypt
 from jose import JWTError, jwt
-from passlib.context import CryptContext
 
 from app.core.config import settings
-
-
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
@@ -23,7 +20,12 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     Returns:
         bool: 密码匹配返回True，否则返回False
     """
-    return pwd_context.verify(plain_password, hashed_password)
+    try:
+        plain_bytes = plain_password.encode("utf-8")
+        hashed_bytes = hashed_password.encode("utf-8") if isinstance(hashed_password, str) else hashed_password
+        return _bcrypt.checkpw(plain_bytes, hashed_bytes)
+    except Exception:
+        return False
 
 
 def get_password_hash(password: str) -> str:
@@ -38,7 +40,9 @@ def get_password_hash(password: str) -> str:
     Returns:
         str: 生成的哈希密码
     """
-    return pwd_context.hash(password)
+    password_bytes = password.encode("utf-8")
+    hashed_bytes = _bcrypt.hashpw(password_bytes, _bcrypt.gensalt())
+    return hashed_bytes.decode("utf-8")
 
 
 def create_access_token(subject: str, tenant_id: int, expires_delta: timedelta | None = None) -> str:

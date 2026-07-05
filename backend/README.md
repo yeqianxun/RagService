@@ -76,7 +76,7 @@ chmod +x start_dev.sh
 
 编辑 `.env` 文件，配置 PostgreSQL 连接：
 ```env
-DATABASE_URL=postgresql+asyncpg://username:password@localhost:5432/database_name
+DATABASE_URL=postgresql+psycopg://username:password@localhost:5432/database_name
 ```
 
 ## 生产部署

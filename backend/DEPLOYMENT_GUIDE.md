@@ -105,7 +105,7 @@ ALGORITHM=HS256
 ACCESS_TOKEN_EXPIRE_MINUTES=120
 
 # 数据库配置
-DATABASE_URL=postgresql+asyncpg://username:password@localhost:5432/database_name
+DATABASE_URL=postgresql+psycopg://username:password@localhost:5432/database_name
 
 # CORS 配置
 CORS_ORIGINS=["https://yourdomain.com"]

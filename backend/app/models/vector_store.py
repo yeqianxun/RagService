@@ -1,4 +1,6 @@
-from sqlalchemy import String, Integer, Text, ForeignKey
+from typing import Any
+
+from sqlalchemy import JSON, Float, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin, TenantScopedMixin, Vector
@@ -15,24 +17,19 @@ class Document(Base, TimestampMixin, TenantScopedMixin):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     content: Mapped[str] = mapped_column(Text)
-    embedding: Mapped[list[float]] = mapped_column(
-        'embedding',
-        # 使用 Vector 类型存储向量，如果 pgvector 不可用则使用数组
+    embedding: Mapped[list[float] | None] = mapped_column(
         Vector,
         nullable=True
     )
-    metadata_json: Mapped[dict] = mapped_column(
-        'metadata',
-        # 存储文档元数据
+    metadata_json: Mapped[dict[str, Any] | None] = mapped_column(
+        JSON,
         nullable=True
     )
-    similarity_score: Mapped[float] = mapped_column(
-        # 用于存储相似度分数
+    similarity_score: Mapped[float | None] = mapped_column(
+        Float,
         nullable=True
     )
-
-    # 关系
-    tenant: Mapped["Tenant"] = relationship("Tenant", back_populates="documents")
+    tenant = relationship("Tenant", back_populates="documents")
 
     def __repr__(self):
         return f"<Document(id={self.id}, title='{self.title}', tenant_id={self.tenant_id})>"

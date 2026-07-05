@@ -1,3 +1,5 @@
+import asyncio
+import platform
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -7,6 +9,10 @@ from app.api.router import api_router
 from app.core.config import settings
 from app.core.exceptions import register_exception_handlers
 from app.db.init_db import initialize_database
+
+# Windows 上 psycopg 异步模式需要使用 SelectorEventLoop
+if platform.system() == "Windows":
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
 
 @asynccontextmanager

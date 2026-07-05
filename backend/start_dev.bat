@@ -17,9 +17,10 @@ echo 检查 .env 文件...
 if not exist .env (
     echo 复制 .env.example 到 .env
     copy .env.example .env
+    echo 请编辑 .env 文件以配置数据库连接
 )
 
-echo 启动开发服务器...
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+echo 启动开发服务器（使用 run.py 入口解决 Windows 事件循环兼容性）...
+python run.py
 
 pause

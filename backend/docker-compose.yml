@@ -1,0 +1,40 @@
+version: '3.8'
+
+services:
+  db:
+    image: tensorchord/pgvecto-rs:pg14-v0.2.0
+    container_name: rag_postgres
+    environment:
+      POSTGRES_DB: rag_service
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build: .
+    container_name: rag_backend
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+psycopg://postgres:password@db:5432/rag_service
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./uploads:/app/uploads
+      - ./.env:/app/.env
+    command: >
+      sh -c "while ! nc -z db 5432; do sleep 1; done &&
+             gunicorn app.main:app -c gunicorn_conf.py"
+    restart: on-failure
+
+volumes:
+  postgres_data:
