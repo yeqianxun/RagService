@@ -37,3 +37,10 @@ class TokenData(BaseModel):
     token_type: str = "bearer"
     expires_in: int
     user: CurrentUserInfo
+
+
+class OAuth2TokenResponse(BaseModel):
+    """OAuth2 标准 token 响应格式"""
+    access_token: str
+    token_type: str = "bearer"
+    expires_in: int

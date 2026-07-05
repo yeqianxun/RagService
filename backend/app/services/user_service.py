@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
 from app.core.config import settings
-from app.core.exceptions import AppException
+from app.core.exceptions import AppException, AppErrorCode
 from app.core.security import get_password_hash
 from app.models.role import Role
 from app.models.user import User
@@ -41,14 +41,14 @@ async def create_user(
     role_stmt = select(Role).where(Role.id == payload.role_id, Role.tenant_id == tenant_id)
     role = (await session.execute(role_stmt)).scalar_one_or_none()
     if role is None:
-        raise AppException(status_code=404, code=4042, message="角色不存在或不属于当前租户")
+        raise AppException.from_error(AppErrorCode.ROLE_NOT_FOUND)
 
     exists_stmt = select(User).where(
         User.tenant_id == tenant_id,
         (User.email == payload.email) | (User.username == payload.username),
     )
     if (await session.execute(exists_stmt)).scalar_one_or_none():
-        raise AppException(status_code=400, code=4002, message="邮箱或用户名已存在")
+        raise AppException.from_error(AppErrorCode.USER_EXISTS)
 
     user = User(
         tenant_id=tenant_id,
@@ -115,7 +115,7 @@ async def get_user_detail(session: AsyncSession, tenant_id: int, user_id: int) -
     )
     user = (await session.execute(stmt)).scalar_one_or_none()
     if user is None:
-        raise AppException(status_code=404, code=4041, message="用户不存在")
+        raise AppException.from_error(AppErrorCode.USER_NOT_EXIST)
     return user
 
 

@@ -8,7 +8,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.router import api_router
 from app.core.config import settings
 from app.core.exceptions import register_exception_handlers
+from app.core.logging_config import app_logger
 from app.db.init_db import initialize_database
+from app.middlewares import AccessLogMiddleware
 
 # Windows 上 psycopg 异步模式需要使用 SelectorEventLoop
 if platform.system() == "Windows":
@@ -29,6 +31,7 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
+    app.add_middleware(AccessLogMiddleware)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.CORS_ORIGINS,
@@ -38,6 +41,11 @@ def create_app() -> FastAPI:
     )
     register_exception_handlers(app)
     app.include_router(api_router, prefix=settings.API_V1_PREFIX)
+
+    app_logger.info(
+        "Application started | debug=%s | docs=http://localhost:8000/docs",
+        settings.DEBUG,
+    )
     return app
 
 

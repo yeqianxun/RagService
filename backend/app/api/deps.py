@@ -1,18 +1,18 @@
 from collections.abc import Callable
 
-from fastapi import Depends, status
+from fastapi import Depends
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
-from app.core.exceptions import AppException
+from app.core.exceptions import AppException, AppErrorCode
 from app.core.security import decode_access_token
 from app.db.session import get_db
 from app.models.user import User
 
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/token")
 
 
 async def get_current_user(
@@ -40,11 +40,7 @@ async def get_current_user(
         user_email = payload["sub"]
         tenant_id = payload["tenant_id"]
     except (KeyError, ValueError) as exc:
-        raise AppException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            code=4010,
-            message="认证信息无效",
-        ) from exc
+        raise AppException.from_error(AppErrorCode.INVALID_TOKEN) from exc
 
     stmt = (
         select(User)
@@ -53,9 +49,9 @@ async def get_current_user(
     )
     user = (await session.execute(stmt)).scalar_one_or_none()
     if user is None:
-        raise AppException(status_code=status.HTTP_401_UNAUTHORIZED, code=4011, message="用户不存在")
+        raise AppException.from_error(AppErrorCode.USER_NOT_FOUND)
     if not user.is_active:
-        raise AppException(status_code=status.HTTP_403_FORBIDDEN, code=4030, message="用户已被禁用")
+        raise AppException.from_error(AppErrorCode.USER_DISABLED)
     return user
 
 
@@ -106,11 +102,7 @@ def require_permissions(*required_permissions: str) -> Callable[[User], User]:
 
         permissions = set(current_user.role.permissions if current_user.role else [])
         if not set(required_permissions).issubset(permissions):
-            raise AppException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                code=4031,
-                message="当前账号缺少访问权限",
-            )
+            raise AppException.from_error(AppErrorCode.PERMISSION_DENIED)
         return current_user
 
     return checker

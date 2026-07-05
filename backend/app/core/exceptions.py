@@ -1,13 +1,48 @@
+from dataclasses import dataclass
+
 from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 
+@dataclass(frozen=True)
+class ErrorCode:
+    """统一错误码定义"""
+    http_status: int   # HTTP 状态码
+    code: int          # 业务错误码
+    message: str       # 错误消息
+
+
+class AppErrorCode:
+    """所有业务错误码常量"""
+    # 400 Bad Request
+    TENANT_EXISTS = ErrorCode(400, 4001, "租户名称或编码已存在")
+    USER_EXISTS = ErrorCode(400, 4002, "邮箱或用户名已存在")
+
+    # 401 Unauthorized
+    INVALID_TOKEN = ErrorCode(401, 4010, "认证信息无效")
+    USER_NOT_FOUND = ErrorCode(401, 4011, "用户不存在")
+    INVALID_CREDENTIALS = ErrorCode(401, 4012, "租户、账号或密码错误")
+
+    # 403 Forbidden
+    USER_DISABLED = ErrorCode(403, 4030, "用户已被禁用")
+    PERMISSION_DENIED = ErrorCode(403, 4031, "当前账号缺少访问权限")
+
+    # 404 Not Found
+    USER_NOT_EXIST = ErrorCode(404, 4041, "用户不存在")
+    ROLE_NOT_FOUND = ErrorCode(404, 4042, "角色不存在或不属于当前租户")
+
+
 class AppException(HTTPException):
     def __init__(self, status_code: int, message: str, code: int = 4000) -> None:
         super().__init__(status_code=status_code, detail=message)
         self.error_code = code
+
+    @classmethod
+    def from_error(cls, error: ErrorCode) -> "AppException":
+        """从预定义的 ErrorCode 创建异常实例"""
+        return cls(status_code=error.http_status, code=error.code, message=error.message)
 
 
 def _validation_error_payload(exc: RequestValidationError) -> list[dict[str, str]]:

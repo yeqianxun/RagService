@@ -1,7 +1,7 @@
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.exceptions import AppException
+from app.core.exceptions import AppException, AppErrorCode
 from app.core.security import get_password_hash
 from app.db.init_db import DEFAULT_ADMIN_PERMISSIONS
 from app.models.role import Role
@@ -31,7 +31,7 @@ async def create_tenant(session: AsyncSession, payload: TenantCreate) -> Tenant:
         select(Tenant).where((Tenant.code == payload.code) | (Tenant.name == payload.name))
     )
     if tenant_exists.scalar_one_or_none():
-        raise AppException(status_code=400, code=4001, message="租户名称或编码已存在")
+        raise AppException.from_error(AppErrorCode.TENANT_EXISTS)
 
     tenant = Tenant(name=payload.name, code=payload.code)
     session.add(tenant)

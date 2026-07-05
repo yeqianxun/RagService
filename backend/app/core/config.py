@@ -30,6 +30,7 @@ class Settings(BaseSettings):
         ]
     )
     UPLOAD_DIR: str = "./uploads"
+    LOG_DIR: str = "./logs"
 
     DEFAULT_TENANT_NAME: str = "Platform Tenant"
     DEFAULT_TENANT_CODE: str = "platform"

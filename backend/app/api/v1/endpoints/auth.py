@@ -1,14 +1,20 @@
 from fastapi import APIRouter, Depends
+from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_active_user
 from app.core.config import settings
-from app.core.exceptions import AppException
+from app.core.exceptions import AppException, AppErrorCode
 from app.core.response import success_response
 from app.core.security import create_access_token
 from app.db.session import get_db
 from app.models.user import User
-from app.schemas.auth import CurrentUserInfo, LoginRequest, TokenData
+from app.schemas.auth import (
+    CurrentUserInfo,
+    LoginRequest,
+    OAuth2TokenResponse,
+    TokenData,
+)
 from app.services.auth_service import authenticate_user
 
 
@@ -39,7 +45,7 @@ async def login(payload: LoginRequest, session: AsyncSession = Depends(get_db)):
         password=payload.password,
     )
     if user is None:
-        raise AppException(status_code=401, code=4012, message="租户、账号或密码错误")
+        raise AppException.from_error(AppErrorCode.INVALID_CREDENTIALS)
 
     token = create_access_token(subject=user.email, tenant_id=user.tenant_id)
     data = TokenData(
@@ -48,6 +54,50 @@ async def login(payload: LoginRequest, session: AsyncSession = Depends(get_db)):
         user=CurrentUserInfo.model_validate(user, from_attributes=True),
     )
     return success_response(data=data, message="登录成功")
+
+
+@router.post("/token", include_in_schema=False)
+async def oauth2_token(
+    form_data: OAuth2PasswordRequestForm = Depends(),
+    session: AsyncSession = Depends(get_db),
+):
+    """
+    OAuth2 token 端点（兼容 Swagger Authorize 弹窗）
+
+    该端点接收 application/x-www-form-urlencoded 格式的请求，
+    支持两种 username 格式：
+      1. "租户编码/邮箱"（例如 "platform/admin@example.com"）
+      2. 仅邮箱（例如 "admin@example.com"），此时使用默认租户编码
+
+    password 字段为登录密码。
+
+    此端点不显示在 Swagger 文档中，仅用于 Authorize 弹窗的自动认证流程。
+    """
+    # 解析 username 为 tenant_code 和 email
+    if "/" in form_data.username:
+        tenant_code, email = form_data.username.split("/", 1)
+        tenant_code = tenant_code.strip()
+    else:
+        # 未指定租户时使用默认租户
+        tenant_code = settings.DEFAULT_TENANT_CODE
+        email = form_data.username
+
+    email = email.strip()
+
+    user = await authenticate_user(
+        session=session,
+        tenant_code=tenant_code,
+        email=email,
+        password=form_data.password,
+    )
+    if user is None:
+        raise AppException.from_error(AppErrorCode.INVALID_CREDENTIALS)
+
+    token = create_access_token(subject=user.email, tenant_id=user.tenant_id)
+    return OAuth2TokenResponse(
+        access_token=token,
+        expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+    )
 
 
 @router.get("/me")
