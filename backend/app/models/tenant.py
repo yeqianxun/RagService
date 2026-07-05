@@ -14,3 +14,4 @@ class Tenant(Base, TimestampMixin):
 
     roles = relationship("Role", back_populates="tenant", cascade="all, delete-orphan")
     users = relationship("User", back_populates="tenant", cascade="all, delete-orphan")
+    documents = relationship("Document", back_populates="tenant", cascade="all, delete-orphan")

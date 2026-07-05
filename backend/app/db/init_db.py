@@ -1,4 +1,4 @@
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -70,6 +70,8 @@ async def initialize_database() -> None:
 
     """
     async with engine.begin() as connection:
+        # 启用 pgvector 扩展
+        await connection.execute(text('CREATE EXTENSION IF NOT EXISTS vector'))
         await connection.run_sync(Base.metadata.create_all)
 
     async with AsyncSessionLocal() as session:
