@@ -1,5 +1,5 @@
 <template>
-  <div class="flex gap-3 items-end bg-[#fcfcfc] pt-3">
+  <div class="flex gap-14 w-full items-center bg-[#fcfcfc] pt-3">
     <el-input
       v-model="inputValue"
       :rows="inputRows"

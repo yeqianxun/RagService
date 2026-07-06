@@ -394,7 +394,6 @@ const handleSendMessage = (message) => {
     .input-container {
       padding: 24px;
       background: #fcfcfc;
-      border-top: 1px solid #e5e7eb;
       display: flex;
       justify-content: center;
       max-width: 800px;

@@ -1,0 +1,267 @@
+{
+  "__inputs": [],
+  "__requires": [],
+  "title": "FastAPI RAG Service",
+  "version": 1,
+  "uid": "fastapi-rag-monitoring",
+  "schemaVersion": 39,
+  "tags": ["fastapi", "rag", "python"],
+  "timezone": "browser",
+  "panels": [
+    {
+      "title": "HTTP 请求速率",
+      "type": "timeseries",
+      "gridPos": {"x": 0, "y": 0, "w": 8, "h": 8},
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "rate(http_requests_total[1m])",
+          "legendFormat": "{{method}} {{path}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": {"showPoints": "never"}
+        }
+      }
+    },
+    {
+      "title": "请求耗时 P50/P95/P99",
+      "type": "timeseries",
+      "gridPos": {"x": 8, "y": 0, "w": 8, "h": 8},
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, rate(http_request_duration_seconds_bucket[1m]))",
+          "legendFormat": "P50",
+          "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[1m]))",
+          "legendFormat": "P95",
+          "refId": "B"
+        },
+        {
+          "expr": "histogram_quantile(0.99, rate(http_request_duration_seconds_bucket[1m]))",
+          "legendFormat": "P99",
+          "refId": "C"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {"showPoints": "never"}
+        }
+      }
+    },
+    {
+      "title": "HTTP 状态码分布",
+      "type": "timeseries",
+      "gridPos": {"x": 16, "y": 0, "w": 8, "h": 8},
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "rate(http_requests_total[1m])",
+          "legendFormat": "{{status}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {"showPoints": "never"}
+        }
+      }
+    },
+    {
+      "title": "CPU 使用率",
+      "type": "gauge",
+      "gridPos": {"x": 0, "y": 8, "w": 4, "h": 6},
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "system_cpu_usage_percent",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 70},
+              {"color": "red", "value": 90}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "title": "CPU 核数",
+      "type": "stat",
+      "gridPos": {"x": 4, "y": 8, "w": 2, "h": 3},
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "system_cpu_count",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "title": "进程 CPU 使用率",
+      "type": "timeseries",
+      "gridPos": {"x": 6, "y": 8, "w": 6, "h": 6},
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "process_cpu_percent",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "custom": {"showPoints": "never"}
+        }
+      }
+    },
+    {
+      "title": "进程内存",
+      "type": "timeseries",
+      "gridPos": {"x": 12, "y": 8, "w": 6, "h": 6},
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "process_memory_bytes",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "custom": {"showPoints": "never"}
+        }
+      }
+    },
+    {
+      "title": "内存使用率",
+      "type": "gauge",
+      "gridPos": {"x": 18, "y": 8, "w": 6, "h": 6},
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "system_memory_usage_percent",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 70},
+              {"color": "red", "value": 90}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "title": "磁盘使用率",
+      "type": "timeseries",
+      "gridPos": {"x": 0, "y": 14, "w": 8, "h": 7},
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "system_disk_usage_percent",
+          "legendFormat": "{{mount}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "custom": {"showPoints": "never"}
+        }
+      }
+    },
+    {
+      "title": "网络 I/O",
+      "type": "timeseries",
+      "gridPos": {"x": 8, "y": 14, "w": 8, "h": 7},
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "rate(system_network_bytes_sent_total[1m])",
+          "legendFormat": "sent - {{interface}}",
+          "refId": "A"
+        },
+        {
+          "expr": "rate(system_network_bytes_received_total[1m])",
+          "legendFormat": "recv - {{interface}}",
+          "refId": "B"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "Bps",
+          "custom": {"showPoints": "never"}
+        }
+      }
+    },
+    {
+      "title": "进程信息",
+      "type": "stat",
+      "gridPos": {"x": 16, "y": 14, "w": 4, "h": 3},
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "process_open_fds",
+          "refId": "A"
+        }
+      ],
+      "description": "进程打开文件描述符数"
+    },
+    {
+      "title": "进程线程数",
+      "type": "stat",
+      "gridPos": {"x": 20, "y": 14, "w": 4, "h": 3},
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "process_threads",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "title": "进程运行时间",
+      "type": "stat",
+      "gridPos": {"x": 16, "y": 17, "w": 8, "h": 4},
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "process_uptime_seconds",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        }
+      }
+    }
+  ]
+}
