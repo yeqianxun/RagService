@@ -49,7 +49,7 @@ async def create_tenant(session: AsyncSession, payload: TenantCreate) -> Tenant:
     admin_user = User(
         tenant_id=tenant.id,
         role_id=admin_role.id,
-        username="admin",
+        username=payload.admin_username,
         email=payload.admin_email,
         full_name=payload.admin_full_name,
         hashed_password=get_password_hash(payload.admin_password),
@@ -62,17 +62,22 @@ async def create_tenant(session: AsyncSession, payload: TenantCreate) -> Tenant:
     return tenant
 
 
-async def list_tenants(session: AsyncSession) -> list[Tenant]:
+async def list_tenants(session: AsyncSession, tenant_id: int | None = None) -> list[Tenant]:
     """
-    列出所有租户服务函数
+    列出租户服务函数
 
-    该函数返回数据库中所有的租户列表，按ID升序排列。
+    该函数返回租户列表，按ID升序排列。如果指定了tenant_id，则只返回该租户；
+    否则返回所有租户（仅限超级管理员使用）。
 
     Args:
         session (AsyncSession): 数据库异步会话
+        tenant_id (int | None): 可选的租户ID过滤
 
     Returns:
         list[Tenant]: 租户对象列表
     """
-    result = await session.execute(select(Tenant).order_by(Tenant.id.asc()))
+    stmt = select(Tenant).order_by(Tenant.id.asc())
+    if tenant_id is not None:
+        stmt = stmt.where(Tenant.id == tenant_id)
+    result = await session.execute(stmt)
     return list(result.scalars().all())

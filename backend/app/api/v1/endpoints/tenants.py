@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_active_user, require_permissions
+from app.core.exceptions import AppException, AppErrorCode
 from app.core.response import success_response
 from app.db.session import get_db
 from app.models.user import User
@@ -32,7 +33,7 @@ async def get_tenants(
     if current_user.is_superuser:
         tenants = await list_tenants(session)
     else:
-        tenants = [current_user.tenant]
+        tenants = await list_tenants(session, tenant_id=current_user.tenant_id)
     data = [TenantRead.model_validate(tenant, from_attributes=True) for tenant in tenants]
     return success_response(data=data, message="获取租户列表成功")
 
@@ -40,22 +41,27 @@ async def get_tenants(
 @router.post("")
 async def create_tenant_endpoint(
     payload: TenantCreate,
-    _: User = Depends(require_permissions("tenant:create")),
+    current_user: User = Depends(get_current_active_user),
     session: AsyncSession = Depends(get_db),
 ):
     """
-    创建租户接口
+    创建租户接口（仅超级管理员可用）
 
-    该接口允许有 "tenant:create" 权限的用户创建新的租户。
+    该接口仅允许超级管理员创建新的租户，并为新租户创建默认的管理员角色和管理员用户。
 
     Args:
         payload (TenantCreate): 包含新租户信息的创建请求数据
-        _ (User): 当前用户，需要有 "tenant:create" 权限（未在函数体中直接使用）
+        current_user (User): 当前用户，必须是超级管理员
         session (AsyncSession): 数据库异步会话依赖
+
+    Raises:
+        AppException: 当当前用户不是超级管理员时抛出403异常
 
     Returns:
         JSONResponse: 包含新创建租户信息的成功响应
     """
+    if not current_user.is_superuser:
+        raise AppException.from_error(AppErrorCode.PERMISSION_DENIED)
     tenant = await create_tenant(session, payload)
     return success_response(
         data=TenantRead.model_validate(tenant, from_attributes=True),

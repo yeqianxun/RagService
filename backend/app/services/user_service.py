@@ -119,19 +119,20 @@ async def get_user_detail(session: AsyncSession, tenant_id: int, user_id: int) -
     return user
 
 
-async def save_upload(file: UploadFile) -> str:
+async def save_upload(file: UploadFile, tenant_id: int) -> str:
     """
     保存上传文件的服务函数
 
-    该函数将上传的文件保存到指定的上传目录中，使用UUID生成唯一文件名以避免冲突。
+    该函数将上传的文件保存到租户隔离的目录中，使用UUID生成唯一文件名以避免冲突。
 
     Args:
         file (UploadFile): 上传的文件对象
+        tenant_id (int): 租户ID，用于创建租户隔离的存储目录
 
     Returns:
         str: 保存后的文件完整路径
     """
-    upload_dir = Path(settings.UPLOAD_DIR)
+    upload_dir = Path(settings.UPLOAD_DIR) / str(tenant_id)
     upload_dir.mkdir(parents=True, exist_ok=True)
     filename = f"{uuid4().hex}_{file.filename}"
     destination = upload_dir / filename

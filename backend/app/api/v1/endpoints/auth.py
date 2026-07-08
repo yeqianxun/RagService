@@ -47,7 +47,7 @@ async def login(payload: LoginRequest, session: AsyncSession = Depends(get_db)):
     if user is None:
         raise AppException.from_error(AppErrorCode.INVALID_CREDENTIALS)
 
-    token = create_access_token(subject=user.email, tenant_id=user.tenant_id)
+    token = create_access_token(subject=user.email, tenant_id=user.tenant_id, is_superuser=user.is_superuser)
     data = TokenData(
         access_token=token,
         expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
@@ -93,7 +93,7 @@ async def oauth2_token(
     if user is None:
         raise AppException.from_error(AppErrorCode.INVALID_CREDENTIALS)
 
-    token = create_access_token(subject=user.email, tenant_id=user.tenant_id)
+    token = create_access_token(subject=user.email, tenant_id=user.tenant_id, is_superuser=user.is_superuser)
     return OAuth2TokenResponse(
         access_token=token,
         expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,

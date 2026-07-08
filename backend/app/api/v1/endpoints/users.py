@@ -122,7 +122,7 @@ async def upload_file(
     Returns:
         JSONResponse: 包含上传文件路径和文件名的成功响应
     """
-    file_path = await save_upload(file)
+    file_path = await save_upload(file, current_user.tenant_id)
     background_tasks.add_task(process_uploaded_file, file_path, current_user.id)
     return success_response(
         data={"file_path": file_path, "filename": file.filename},

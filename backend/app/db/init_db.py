@@ -12,7 +12,6 @@ from app.models.user import User
 
 DEFAULT_ADMIN_PERMISSIONS = [
     "tenant:read",
-    "tenant:create",
     "user:read",
     "user:create",
     "user:upload",

@@ -9,6 +9,7 @@ class TenantCreate(BaseModel):
     admin_email: str = Field(..., min_length=6, max_length=255)
     admin_password: str = Field(..., min_length=8, max_length=128)
     admin_full_name: str = Field(..., min_length=2, max_length=100)
+    admin_username: str = Field(default="admin", min_length=2, max_length=50)
 
 
 class TenantRead(ORMModel):
