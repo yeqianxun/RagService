@@ -1,8 +1,9 @@
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import joinedload
+from sqlalchemy.orm import selectinload
 
 from app.core.security import verify_password
+from app.models.role import Role
 from app.models.tenant import Tenant
 from app.models.user import User
 
@@ -35,15 +36,23 @@ async def authenticate_user(
 
     user_stmt = (
         select(User)
-        .options(joinedload(User.role))
         .where(
             User.tenant_id == tenant.id,
             User.email == email,
             User.is_active.is_(True),
         )
     )
-    user = (await session.execute(user_stmt)).scalar_one_or_none()
+    user = (await session.execute(user_stmt)).scalars().first()
     if user is None or not verify_password(password, user.hashed_password):
         return None
+
+    # Load role and permissions eagerly
+    role_stmt = (
+        select(Role)
+        .options(selectinload(Role.permissions))
+        .where(Role.id == user.role_id)
+    )
+    role_result = await session.execute(role_stmt)
+    user.role = role_result.scalars().first()
 
     return user

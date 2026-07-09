@@ -3,7 +3,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import AppException, AppErrorCode
 from app.core.security import get_password_hash
-from app.db.init_db import DEFAULT_ADMIN_PERMISSIONS
+from app.db.init_db import DEFAULT_ADMIN_PERMISSION_CODES
+from app.models.permission import Permission
 from app.models.role import Role
 from app.models.tenant import Tenant
 from app.models.user import User
@@ -15,7 +16,7 @@ async def create_tenant(session: AsyncSession, payload: TenantCreate) -> Tenant:
     创建租户服务函数
 
     该函数创建一个新的租户，并为其创建默认的管理员角色和管理员用户。
-    在创建之前会检查租户名称或编码是否已存在。
+    管理员角色会自动分配 DEFAULT_ADMIN_PERMISSION_CODES 中定义的权限。
 
     Args:
         session (AsyncSession): 数据库异步会话
@@ -37,12 +38,19 @@ async def create_tenant(session: AsyncSession, payload: TenantCreate) -> Tenant:
     session.add(tenant)
     await session.flush()
 
+    # 查找默认权限记录
+    perms_stmt = select(Permission).where(
+        Permission.code.in_(DEFAULT_ADMIN_PERMISSION_CODES)
+    )
+    perms_result = await session.execute(perms_stmt)
+    default_permissions = list(perms_result.scalars().all())
+
     admin_role = Role(
         tenant_id=tenant.id,
         name="admin",
         description="Tenant administrator",
-        permissions=DEFAULT_ADMIN_PERMISSIONS,
     )
+    admin_role.permissions = default_permissions
     session.add(admin_role)
     await session.flush()
 

@@ -1,6 +1,7 @@
 from pydantic import BaseModel, EmailStr, Field
 
 from app.schemas.common import ORMModel
+from app.schemas.permission import PermissionSummary
 
 
 class LoginRequest(BaseModel):
@@ -18,7 +19,7 @@ class TokenPayload(BaseModel):
 class RoleInfo(ORMModel):
     id: int
     name: str
-    permissions: list[str]
+    permissions: list[PermissionSummary]
 
 
 class CurrentUserInfo(ORMModel):

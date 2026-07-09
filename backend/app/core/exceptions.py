@@ -32,6 +32,7 @@ class AppErrorCode:
     # 404 Not Found
     USER_NOT_EXIST = ErrorCode(404, 4041, "用户不存在")
     ROLE_NOT_FOUND = ErrorCode(404, 4042, "角色不存在或不属于当前租户")
+    PERMISSION_NOT_FOUND = ErrorCode(404, 4043, "权限不存在")
 
 
 class AppException(HTTPException):

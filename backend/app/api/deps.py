@@ -4,7 +4,7 @@ from fastapi import Depends
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import joinedload
+from sqlalchemy.orm import joinedload, selectinload
 
 from app.core.exceptions import AppException, AppErrorCode
 from app.core.security import decode_access_token
@@ -44,14 +44,26 @@ async def get_current_user(
 
     stmt = (
         select(User)
-        .options(joinedload(User.role), joinedload(User.tenant))
+        .options(joinedload(User.tenant))
         .where(User.email == user_email, User.tenant_id == tenant_id)
     )
-    user = (await session.execute(stmt)).scalar_one_or_none()
+    result = await session.execute(stmt)
+    user = result.scalars().first()
     if user is None:
         raise AppException.from_error(AppErrorCode.USER_NOT_FOUND)
     if not user.is_active:
         raise AppException.from_error(AppErrorCode.USER_DISABLED)
+    # Load role and permissions eagerly to avoid lazy-loading in async context
+    role_stmt = (
+        select(Role)
+        .options(selectinload(Role.permissions))
+        .where(Role.id == user.role_id)
+    )
+    role_result = await session.execute(role_stmt)
+    role = role_result.scalars().first()
+    # Attach role to user via the relationship attribute
+    # Using the relationship setter to avoid SQLAlchemy tracking issues
+    user.role = role
     return user
 
 
@@ -100,9 +112,16 @@ def require_permissions(*required_permissions: str) -> Callable[[User], User]:
         if current_user.is_superuser:
             return current_user
 
-        permissions = set(current_user.role.permissions if current_user.role else [])
-        if not set(required_permissions).issubset(permissions):
+        user_permissions = {
+            p.code for p in current_user.role.permissions
+        } if current_user.role else set()
+
+        if not set(required_permissions).issubset(user_permissions):
             raise AppException.from_error(AppErrorCode.PERMISSION_DENIED)
         return current_user
 
     return checker
+
+
+# 延迟导入避免循环依赖
+from app.models.role import Role  # noqa: E402
