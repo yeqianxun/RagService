@@ -1,0 +1,202 @@
+version: '3.8'
+
+# ========================================
+# FastAPI RAG 系统 - 生产环境 Docker Compose 配置
+# ========================================
+# 使用前请确保已配置 .env 文件
+# ========================================
+
+services:
+  # ========================================
+  # PostgreSQL 数据库（带 pgvector）
+  # ========================================
+  db:
+    image: tensorchord/pgvecto-rs:pg14-v0.2.0
+    container_name: rag_postgres_prod
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-rag_service}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me-in-production}
+    ports:
+      - "127.0.0.1:5432:5432"  # 仅本地访问
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./db/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - rag_network
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 512M
+
+  # ========================================
+  # Redis 缓存和会话存储
+  # ========================================
+  redis:
+    image: redis:7-alpine
+    container_name: rag_redis_prod
+    restart: unless-stopped
+    command: >
+      redis-server
+      --requirepass ${REDIS_PASSWORD:-}
+      --appendonly yes
+      --appendfsync everysec
+    ports:
+      - "127.0.0.1:6379:6379"  # 仅本地访问
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    networks:
+      - rag_network
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 128M
+
+  # ========================================
+  # FastAPI 后端服务
+  # ========================================
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: rag_backend_prod
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      - DEBUG=false
+      - DATABASE_URL=postgresql+psycopg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-change-me-in-production}@db:5432/${POSTGRES_DB:-rag_service}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+      - SECRET_KEY=${SECRET_KEY}
+      - LLM_API_KEY=${LLM_API_KEY}
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./uploads:/app/uploads:z
+      - ./logs:/app/logs:z
+    # 生产环境不挂载 .env 文件，使用环境变量
+    command: >
+      sh -c "
+      while ! nc -z db 5432; do sleep 1; done &&
+      while ! nc -z redis 6379; do sleep 1; done &&
+      gunicorn app.main:app -c gunicorn_conf.py
+      "
+    networks:
+      - rag_network
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+        reservations:
+          memory: 1G
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+  # ========================================
+  # Prometheus 监控
+  # ========================================
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: rag_prometheus_prod
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:9090:9090"  # 仅本地访问
+    volumes:
+      - ./prometheus:/etc/prometheus:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=15d'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--web.enable-lifecycle'
+    networks:
+      - rag_network
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 256M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ========================================
+  # Grafana 仪表板
+  # ========================================
+  grafana:
+    image: grafana/grafana:latest
+    container_name: rag_grafana_prod
+    restart: unless-stopped
+    environment:
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_INSTALL_PLUGINS=
+    ports:
+      - "127.0.0.1:3000:3000"  # 仅本地访问
+    volumes:
+      - ./grafana/datasources:/etc/grafana/provisioning/datasources:ro
+      - ./grafana/dashboard.yml:/etc/grafana/provisioning/dashboards/dashboard.yml:ro
+      - ./grafana/dashboards:/etc/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    networks:
+      - rag_network
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 256M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+# ========================================
+# 数据卷持久化
+# ========================================
+volumes:
+  postgres_data:
+  redis_data:
+  prometheus_data:
+  grafana_data:
+
+# ========================================
+# 网络配置
+# ========================================
+networks:
+  rag_network:
+    driver: bridge
+    ipam:
+      driver: default

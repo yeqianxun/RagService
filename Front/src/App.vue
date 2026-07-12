@@ -1,18 +1,17 @@
 <template>
   <div class="doubao-container">
     <el-container class="main-layout">
-      <!-- 侧边栏 -->
       <el-aside class="sidebar" :class="{ collapsed: isSidebarCollapsed }">
         <div class="logo-section">
           <div class="logo-icon">豆</div>
-          <h1 v-show="!isSidebarCollapsed" class="logo-text">豆包</h1>
+          <h1 v-show="!isSidebarCollapsed" class="logo-text">AI助手</h1>
           <el-button
             class="collapse-btn"
             :icon="isSidebarCollapsed ? ArrowRight : ArrowLeft"
             @click="toggleSidebar"
             text
             circle
-          />
+          ></el-button>
         </div>
 
         <div class="new-chat-section">
@@ -22,16 +21,35 @@
           </el-button>
         </div>
 
+        <div class="menu-section">
+          <div class="menu-item" :class="{ active: activeMenu === 'chat' }" @click="activeMenu = 'chat'">
+            <el-icon><ChatLineRound /></el-icon>
+            <span v-show="!isSidebarCollapsed">对话</span>
+          </div>
+          <div class="menu-item" :class="{ active: activeMenu === 'tasks' }" @click="activeMenu = 'tasks'">
+            <el-icon><Document /></el-icon>
+            <span v-show="!isSidebarCollapsed">任务</span>
+          </div>
+          <div class="menu-item" :class="{ active: activeMenu === 'files' }" @click="activeMenu = 'files'">
+            <el-icon><FolderOpened /></el-icon>
+            <span v-show="!isSidebarCollapsed">文件</span>
+          </div>
+          <div class="menu-item" :class="{ active: activeMenu === 'more' }" @click="activeMenu = 'more'">
+            <el-icon><Grid /></el-icon>
+            <span v-show="!isSidebarCollapsed">更多</span>
+          </div>
+        </div>
+
         <div class="history-section">
           <div class="history-title" v-show="!isSidebarCollapsed">
-            <span>历史记录</span>
+            <span>历史对话</span>
           </div>
           <div class="history-list">
             <div
               v-for="chat in allConversations"
               :key="chat.id"
               class="history-item"
-              :class="{ active: chat.id === currentChatId }"
+              :class="{ active: chat.id === currentConversationId }"
               @click="selectChat(chat.id)"
             >
               <el-icon><Document /></el-icon>
@@ -39,29 +57,105 @@
             </div>
           </div>
         </div>
+
+        <div class="user-section">
+          <div class="user-avatar">
+            <el-avatar :size="32" src="https://cube.elemecdn.com/0/88/03b0d39583f48206768a7534e55bcpng.png"></el-avatar>
+          </div>
+          <div class="user-info" v-show="!isSidebarCollapsed">
+            <span class="user-name">用户</span>
+          </div>
+        </div>
       </el-aside>
 
-      <!-- 折叠按钮，当侧边栏隐藏时显示 -->
-      <div v-if="isSidebarCollapsed" class="absolute left-0 top-1/2 transform -translate-y-1/2 z-10">
-        <el-button
-          class="w-8 h-8 min-h-8 p-0 flex items-center justify-center rounded-r-lg text-gray-500 bg-white shadow-md hover:bg-indigo-100 hover:text-indigo-600 border border-gray-200"
-          :icon="ArrowRight"
-          @click="toggleSidebar"
-          text
-          circle
-        />
-      </div>
-
-      <!-- 主内容区 -->
       <el-container>
         <el-header class="header">
           <div class="header-content">
-            <h2>{{ currentChatTitle }}</h2>
+            <div class="header-left">
+              <h2>{{ currentChatTitle }}</h2>
+            </div>
+            <div class="header-right">
+              <el-button text :icon="Share">分享</el-button>
+              <el-button text :icon="Setting">设置</el-button>
+              <el-button type="primary" round size="small" class="upgrade-btn">
+                <el-icon><Star /></el-icon>
+                升级到高级版
+              </el-button>
+            </div>
           </div>
         </el-header>
 
         <el-main class="chat-area">
-          <div class="messages-container">
+          <div v-if="isWelcomeScreen" class="welcome-screen">
+            <div class="welcome-content">
+              <h1 class="welcome-title">有什么我能帮你的吗？</h1>
+
+              <div class="quick-questions">
+                <div class="question-row">
+                  <div class="question-card" @click="sendQuickQuestion('如何快速上手Vue3的新特性')">
+                    <div class="question-text">如何快速上手Vue3的新特性</div>
+                  </div>
+                  <div class="question-card" @click="sendQuickQuestion('帮我写一个Python爬虫脚本')">
+                    <div class="question-text">帮我写一个Python爬虫脚本</div>
+                  </div>
+                  <div class="question-card" @click="sendQuickQuestion('如何提升前端代码质量')">
+                    <div class="question-text">如何提升前端代码质量</div>
+                  </div>
+                </div>
+                <div class="question-row">
+                  <div class="question-card" @click="sendQuickQuestion('给我推荐几款好用的AI工具')">
+                    <div class="question-text">给我推荐几款好用的AI工具</div>
+                  </div>
+                  <div class="question-card" @click="sendQuickQuestion('如何做好一个项目的需求分析')">
+                    <div class="question-text">如何做好一个项目的需求分析</div>
+                  </div>
+                  <div class="question-card" @click="sendQuickQuestion('帮我解释一下什么是RAG技术')">
+                    <div class="question-text">帮我解释一下什么是RAG技术</div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="capabilities">
+                <div class="capability-title">我的能力</div>
+                <div class="capability-list">
+                  <div class="capability-item">
+                    <el-icon class="capability-icon"><Document /></el-icon>
+                    <span>文档总结</span>
+                  </div>
+                  <div class="capability-item">
+                    <el-icon class="capability-icon"><Picture /></el-icon>
+                    <span>图片生成</span>
+                  </div>
+                  <div class="capability-item">
+                    <el-icon class="capability-icon"><Edit /></el-icon>
+                    <span>写作助手</span>
+                  </div>
+                  <div class="capability-item">
+                    <el-icon class="capability-icon"><Microphone /></el-icon>
+                    <span>语音生成</span>
+                  </div>
+                  <div class="capability-item">
+                    <el-icon class="capability-icon"><ChatLineRound /></el-icon>
+                    <span>翻译</span>
+                  </div>
+                  <div class="capability-item">
+                    <el-icon class="capability-icon"><VideoCamera /></el-icon>
+                    <span>视频生成</span>
+                  </div>
+                  <div class="capability-item">
+                    <el-icon class="capability-icon"><Reading /></el-icon>
+                    <span>深度研究</span>
+                  </div>
+                  <div class="capability-item">
+                    <el-icon class="capability-icon"><Grid /></el-icon>
+                    <span>更多</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div v-else class="messages-container">
             <ChatMessage
               v-for="(msg, index) in currentMessages"
               :key="msg.id || index"
@@ -72,7 +166,7 @@
           <div class="input-container">
             <ChatInput
               v-model="inputMessage"
-              placeholder="请输入消息..."
+              placeholder="发送消息或按空格键唤起..."
               @send="handleSendMessage"
             />
           </div>
@@ -83,15 +177,24 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { ElMessage } from 'element-plus'
 import {
   Plus,
   Document,
-  User,
   ChatLineRound,
   ArrowLeft,
-  ArrowRight
+  ArrowRight,
+  Share,
+  Setting,
+  Star,
+  FolderOpened,
+  Grid,
+  Picture,
+  Edit,
+  Microphone,
+  VideoCamera,
+  Reading
 } from '@element-plus/icons-vue'
 import { useChatStore } from '@/stores/chat'
 import { storeToRefs } from 'pinia'
@@ -99,58 +202,53 @@ import ChatMessage from '@/components/ChatMessage.vue'
 import ChatInput from '@/components/ChatInput.vue'
 
 const isSidebarCollapsed = ref(false)
-let currentChatId = ref('')
-let currentChatTitle=ref('')
+const activeMenu = ref('chat')
 const chatStore = useChatStore()
-const { currentMessages, allConversations } = storeToRefs(chatStore)
-
-// 初始化一些示例对话
-if (allConversations.value.length === 0) {
-  chatStore.createConversation('关于Vue3的问题')
-  chatStore.createConversation('JavaScript学习')
-  chatStore.createConversation('前端开发技巧')
-
-  // 添加一些示例消息
-  chatStore.addMessage(allConversations.value[0].id, {
-    role: 'assistant',
-    content: '你好！我是豆包，有什么可以帮助你的吗？'
-  })
-  chatStore.addMessage(allConversations.value[0].id, {
-    role: 'user',
-    content: '你好，我想了解Vue3的一些特性'
-  })
-  chatStore.addMessage(allConversations.value[0].id, {
-    role: 'assistant',
-    content: '好的，Vue3是Vue.js的最新版本，引入了许多新特性，如Composition API、更好的TypeScript支持、性能优化等。你可以问我具体想了解哪方面。'
-  })
-}
+const { currentMessages, allConversations, currentConversationId } = storeToRefs(chatStore)
 
 const inputMessage = ref('')
 
-// 创建新聊天
+const isWelcomeScreen = computed(() => {
+  if (!currentConversationId.value) return true
+  return currentMessages.value.length === 0
+})
+
+const currentChatTitle = computed(() => {
+  if (!currentConversationId.value) return '新对话'
+  const chat = allConversations.value.find(c => c.id === currentConversationId.value)
+  return chat ? chat.title : '新对话'
+})
+
 const createNewChat = () => {
   chatStore.createConversation()
   ElMessage.success('已创建新对话')
 }
 
-// 选择聊天
 const selectChat = (id) => {
   chatStore.switchConversation(id)
 }
 
-// 切换侧边栏展开/折叠
 const toggleSidebar = () => {
   isSidebarCollapsed.value = !isSidebarCollapsed.value
 }
 
-// 处理发送消息
+const sendQuickQuestion = (question) => {
+  if (!currentConversationId.value) {
+    chatStore.createConversation(question.substring(0, 20))
+  }
+  chatStore.sendMessage(question)
+}
+
 const handleSendMessage = (message) => {
   if (!message.trim()) {
     ElMessage.warning('请输入消息内容')
     return
   }
 
-  // 发送消息
+  if (!currentConversationId.value) {
+    chatStore.createConversation(message.substring(0, 20))
+  }
+
   chatStore.sendMessage(message)
 }
 </script>
@@ -166,7 +264,7 @@ const handleSendMessage = (message) => {
   height: 100vh;
   width: 100%;
   overflow: hidden;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
 }
 
 .main-layout {
@@ -179,13 +277,14 @@ const handleSendMessage = (message) => {
     flex-direction: column;
     transition: width 0.3s ease;
     overflow: hidden;
+    width: 240px !important;
 
     &:not(.collapsed) {
       width: 240px !important;
     }
 
     &.collapsed {
-      width: 0px !important;
+      width: 72px !important;
     }
 
     .logo-section {
@@ -193,12 +292,12 @@ const handleSendMessage = (message) => {
       align-items: center;
       padding: 16px;
       border-bottom: 1px solid #e5e7eb;
-      height: 48px;
+      height: 64px;
       justify-content: space-between;
 
       .logo-icon {
-        width: 32px;
-        height: 32px;
+        width: 36px;
+        height: 36px;
         border-radius: 8px;
         background: linear-gradient(135deg, #626aef, #5c6aed);
         color: white;
@@ -206,7 +305,7 @@ const handleSendMessage = (message) => {
         align-items: center;
         justify-content: center;
         font-weight: bold;
-        font-size: 14px;
+        font-size: 16px;
         flex-shrink: 0;
       }
 
@@ -215,25 +314,24 @@ const handleSendMessage = (message) => {
         font-weight: 700;
         color: #1f2329;
         letter-spacing: -0.5px;
-        margin: 0 8px;
+        margin: 0 12px;
         flex: 1;
       }
 
       .collapse-btn {
-        width: 32px;
-        height: 32px;
-        min-height: 32px;
+        width: 28px;
+        height: 28px;
+        min-height: 28px;
         padding: 0;
         display: flex;
         align-items: center;
         justify-content: center;
         border-radius: 6px;
         color: #6b7280;
-        background: #e0e7ff;
 
         &:hover {
-          background: #c7d2fe;
-          color: #4f46e5;
+          background: #e5e7eb;
+          color: #1f2329;
         }
       }
     }
@@ -243,8 +341,8 @@ const handleSendMessage = (message) => {
 
       .new-chat-btn {
         width: 100%;
-        height: 38px;
-        border-radius: 10px;
+        height: 40px;
+        border-radius: 8px;
         font-weight: 500;
         font-size: 14px;
         background: linear-gradient(135deg, #6366f1, #8b5cf6);
@@ -257,6 +355,35 @@ const handleSendMessage = (message) => {
       }
     }
 
+    .menu-section {
+      padding: 8px;
+
+      .menu-item {
+        display: flex;
+        align-items: center;
+        padding: 10px 12px;
+        border-radius: 8px;
+        cursor: pointer;
+        margin-bottom: 2px;
+        color: #374151;
+        transition: all 0.2s ease;
+
+        &:hover {
+          background-color: #e5e7eb;
+        }
+
+        &.active {
+          background-color: #e0e7ff;
+          color: #4f46e5;
+        }
+
+        span {
+          margin-left: 10px;
+          font-size: 14px;
+        }
+      }
+    }
+
     .history-section {
       flex: 1;
       overflow-y: auto;
@@ -264,10 +391,9 @@ const handleSendMessage = (message) => {
 
       .history-title {
         padding: 12px 8px 6px 8px;
-        font-size: 11px;
+        font-size: 12px;
         color: #6b7280;
         font-weight: 500;
-        text-transform: uppercase;
       }
 
       .history-list {
@@ -301,25 +427,60 @@ const handleSendMessage = (message) => {
         }
       }
     }
+
+    .user-section {
+      padding: 12px;
+      border-top: 1px solid #e5e7eb;
+      display: flex;
+      align-items: center;
+
+      .user-avatar {
+        flex-shrink: 0;
+      }
+
+      .user-info {
+        margin-left: 10px;
+        .user-name {
+          font-size: 14px;
+          font-weight: 500;
+          color: #374151;
+        }
+      }
+    }
   }
 
   .header {
     border-bottom: 1px solid #e5e7eb;
     padding: 0;
-    background: #f9fafb;
-    height: 48px !important;
+    background: #ffffff;
+    height: 56px !important;
 
     .header-content {
       height: 100%;
       display: flex;
       align-items: center;
-      padding: 0 16px;
+      justify-content: space-between;
+      padding: 0 24px;
 
       h2 {
-        font-size: 15px;
+        font-size: 16px;
         font-weight: 600;
         color: #1f2329;
         margin: 0;
+      }
+    }
+
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+
+      .upgrade-btn {
+        background: linear-gradient(135deg, #6366f1, #8b5cf6);
+        border: none;
+        font-weight: 500;
+        font-size: 13px;
+        padding: 6px 16px;
       }
     }
   }
@@ -329,6 +490,119 @@ const handleSendMessage = (message) => {
     flex-direction: column;
     padding: 0;
     background-color: #fcfcfc;
+    position: relative;
+
+    .welcome-screen {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow-y: auto;
+      padding: 40px 24px;
+
+      .welcome-content {
+        width: 100%;
+        max-width: 900px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+
+        .welcome-title {
+          font-size: 32px;
+          font-weight: 700;
+          color: #1f2329;
+          margin-bottom: 32px;
+        }
+
+        .quick-questions {
+          width: 100%;
+          margin-bottom: 48px;
+
+          .question-row {
+            display: flex;
+            gap: 16px;
+            margin-bottom: 16px;
+          }
+
+          .question-card {
+            flex: 1;
+            background: white;
+            border: 1px solid #e5e7eb;
+            border-radius: 12px;
+            padding: 20px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+
+            &:hover {
+              border-color: #c7d2fe;
+              box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+              transform: translateY(-2px);
+            }
+
+            .question-text {
+              font-size: 14px;
+              color: #374151;
+              line-height: 1.5;
+            }
+          }
+        }
+
+        .capabilities {
+          width: 100%;
+
+          .capability-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: #6b7280;
+            margin-bottom: 16px;
+            text-align: center;
+          }
+
+          .capability-list {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 24px;
+
+            .capability-item {
+              display: flex;
+              flex-direction: column;
+              align-items: center;
+              gap: 8px;
+              cursor: pointer;
+              transition: all 0.2s ease;
+
+              &:hover {
+                .capability-icon {
+                  color: #4f46e5;
+                }
+                span {
+                  color: #4f46e5;
+                }
+              }
+
+              .capability-icon {
+                font-size: 28px;
+                color: #6b7280;
+                width: 52px;
+                height: 52px;
+                background: white;
+                border: 1px solid #e5e7eb;
+                border-radius: 12px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+              }
+
+              span {
+                font-size: 12px;
+                color: #6b7280;
+              }
+            }
+          }
+        }
+      }
+    }
 
     .messages-container {
       flex: 1;
@@ -340,128 +614,35 @@ const handleSendMessage = (message) => {
       max-width: 800px;
       margin: 0 auto;
       width: 100%;
-
-      .message {
-        display: flex;
-        gap: 16px;
-        max-width: 100%;
-
-        &.user-message {
-          align-self: flex-end;
-          flex-direction: row-reverse;
-
-          .content {
-            .text {
-              background-color: #4f46e5;
-              color: white;
-              border-radius: 18px 2px 18px 18px;
-            }
-          }
-        }
-
-        &.bot-message {
-          .content {
-            .text {
-              background-color: white;
-              padding: 12px 16px;
-              border-radius: 2px 18px 18px 18px;
-              box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
-              border: 1px solid #f3f4f6;
-            }
-          }
-        }
-
-        .avatar {
-          display: flex;
-          align-items: flex-start;
-          margin-top: 4px;
-        }
-
-        .content {
-          flex: 1;
-
-          .text {
-            padding: 12px 16px;
-            font-size: 14px;
-            line-height: 1.5;
-            white-space: pre-wrap;
-            word-break: break-word;
-          }
-        }
-      }
     }
 
     .input-container {
-      padding: 24px;
+      padding: 20px 24px;
       background: #fcfcfc;
       display: flex;
       justify-content: center;
       max-width: 800px;
       margin: 0 auto;
       width: 100%;
-
-      .chat-input-container {
-        width: 100%;
-        display: flex;
-        gap: 12px;
-
-        .message-input {
-          flex: 1;
-        }
-
-        .send-btn {
-          border-radius: 12px;
-          padding: 10px 20px;
-          font-weight: 500;
-          height: 44px;
-          background: linear-gradient(135deg, #6366f1, #8b5cf6);
-          border: none;
-
-          &:hover:not(:disabled) {
-            opacity: 0.9;
-            background: linear-gradient(135deg, #5a5dc7, #7a4fd8);
-          }
-
-          &:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-          }
-        }
-      }
     }
   }
 }
 
-// 响应式设计
 @media (max-width: 768px) {
   .sidebar {
-    width: 80px !important;
+    width: 72px !important;
 
-    .logo-text, .history-title, .history-item span {
+    .logo-text, .menu-item span, .history-title, .history-item span, .user-info {
       display: none;
-    }
-
-    .logo-section {
-      justify-content: center;
-      padding: 20px 10px;
-    }
-
-    .logo-icon {
-      margin-right: 0 !important;
-    }
-
-    .new-chat-btn span {
-      display: none;
-    }
-
-    .new-chat-btn .el-icon {
-      margin-right: 0;
     }
   }
 
-  .main-layout .chat-area .messages-container,
-  .main-layout .chat-area .input-container {
-    padding: 16px;
+  .welcome-title {
+    font-size: 24px !important;
+  }
+
+  .question-row {
+    flex-direction: column;
   }
 }
 </style>

@@ -10,6 +10,7 @@ from app.api.router import api_router
 from app.core.config import settings
 from app.core.exceptions import register_exception_handlers
 from app.core.logging_config import app_logger
+from app.core.rate_limiter import setup_rate_limiter
 from app.db.init_db import initialize_database
 from app.middlewares import AccessLogMiddleware
 from app.monitoring.metrics import MetricsMiddleware, setup_metrics
@@ -43,6 +44,9 @@ def create_app() -> FastAPI:
 
     # 初始化 Prometheus 指标
     setup_metrics()
+
+    # 设置限流
+    setup_rate_limiter(app)
 
     app.add_middleware(MetricsMiddleware)
     app.add_middleware(AccessLogMiddleware)

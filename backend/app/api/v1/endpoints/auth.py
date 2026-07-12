@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_current_active_user
 from app.core.config import settings
 from app.core.exceptions import AppException, AppErrorCode
+from app.core.rate_limiter import limit, LIMIT_LOGIN
 from app.core.response import success_response
 from app.core.security import create_access_token
 from app.db.session import get_db
@@ -22,6 +23,7 @@ router = APIRouter()
 
 
 @router.post("/login")
+@limit(LIMIT_LOGIN)
 async def login(payload: LoginRequest, session: AsyncSession = Depends(get_db)):
     """
     用户登录接口
@@ -57,6 +59,7 @@ async def login(payload: LoginRequest, session: AsyncSession = Depends(get_db)):
 
 
 @router.post("/token", include_in_schema=False)
+@limit(LIMIT_LOGIN)
 async def oauth2_token(
     form_data: OAuth2PasswordRequestForm = Depends(),
     session: AsyncSession = Depends(get_db),
@@ -78,7 +81,7 @@ async def oauth2_token(
         tenant_code, email = form_data.username.split("/", 1)
         tenant_code = tenant_code.strip()
     else:
-        # 未指定租户时使用默认租户
+        # 未指定租户时使用默认租户编码
         tenant_code = settings.DEFAULT_TENANT_CODE
         email = form_data.username
 

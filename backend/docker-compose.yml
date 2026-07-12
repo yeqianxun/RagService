@@ -18,14 +18,32 @@ services:
       timeout: 5s
       retries: 5
 
+  redis:
+    image: redis:7-alpine
+    container_name: rag_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
   backend:
     build: .
     container_name: rag_backend
     depends_on:
       db:
         condition: service_healthy
+      redis:
+        condition: service_healthy
     environment:
       DATABASE_URL: postgresql+psycopg://postgres:password@db:5432/rag_service
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
     ports:
       - "8000:8000"
     volumes:
@@ -33,6 +51,7 @@ services:
       - ./.env:/app/.env
     command: >
       sh -c "while ! nc -z db 5432; do sleep 1; done &&
+             while ! nc -z redis 6379; do sleep 1; done &&
              gunicorn app.main:app -c gunicorn_conf.py"
     restart: on-failure
 
@@ -70,5 +89,6 @@ services:
 
 volumes:
   postgres_data:
+  redis_data:
   prometheus_data:
   grafana_data:

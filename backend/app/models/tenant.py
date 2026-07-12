@@ -15,3 +15,8 @@ class Tenant(Base, TimestampMixin):
     roles = relationship("Role", back_populates="tenant", cascade="all, delete-orphan")
     users = relationship("User", back_populates="tenant", cascade="all, delete-orphan")
     documents = relationship("Document", back_populates="tenant", cascade="all, delete-orphan")
+    files = relationship("File", back_populates="tenant", cascade="all, delete-orphan")
+    document_chunks = relationship("DocumentChunk", back_populates="tenant", cascade="all, delete-orphan")
+    rag_queries = relationship("RAGQuery", back_populates="tenant", cascade="all, delete-orphan")
+    chat_sessions = relationship("ChatSession", back_populates="tenant", cascade="all, delete-orphan")
+    chat_messages = relationship("ChatMessage", back_populates="tenant", cascade="all, delete-orphan")
