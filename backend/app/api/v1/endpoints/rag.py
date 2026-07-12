@@ -11,7 +11,6 @@ from app.api.deps import get_current_active_user, require_permissions
 from app.core.response import success_response
 from app.core.exceptions import AppException, AppErrorCode
 from app.core.config import settings
-from app.core.rate_limiter import limit, LIMIT_RAG_QUERY, LIMIT_FILE_UPLOAD
 
 from app.schemas.rag import (
     FileUploadResponse,
@@ -31,7 +30,6 @@ file_service = RAGFileService()
 
 
 @router.post("/files/upload", response_model=FileUploadResponse)
-@limit(LIMIT_FILE_UPLOAD)
 async def upload_file(
     file: UploadFile = File(...),
     current_user: User = Depends(require_permissions("rag:upload")),
@@ -96,15 +94,15 @@ async def process_file(
         raise AppException.from_error(AppErrorCode.NOT_FOUND)
     # 更新为处理中
     await file_service.update_file_status(file_id, current_user.tenant_id, "processing", db)
-
+    
     try:
         # 1. 加载文档
         loader = rag_service.get_loader(db_file.file_path, db_file.file_type)
         documents = loader.load()
-
+        
         # 2. 切分文档
         split_docs = rag_service.split_documents(documents)
-
+        
         # 3. 添加到向量存储
         rag_service.add_documents_to_store(
             documents=split_docs,
@@ -112,7 +110,7 @@ async def process_file(
             file_id=db_file.id,
             filename=db_file.original_filename
         )
-
+        
         # 更新为成功
         await file_service.update_file_status(file_id, current_user.tenant_id, "completed", db)
         return success_response(
@@ -134,7 +132,6 @@ async def process_file(
 
 
 @router.post("/query", response_model=RAGQueryResponse)
-@limit(LIMIT_RAG_QUERY)
 async def rag_query(
     request: RAGQueryRequest,
     session_id: Optional[str] = None,
@@ -143,7 +140,7 @@ async def rag_query(
 ):
     """执行带历史记忆的 RAG 查询"""
     start_time = time.time()
-
+    
     try:
         # 使用 LangChain 服务查询
         result = await rag_service.aquery_with_history(
@@ -154,9 +151,9 @@ async def rag_query(
             session_id=session_id,
             system_prompt=request.system_prompt,
         )
-
+        
         response_time_ms = (time.time() - start_time) * 1000
-
+        
         # 保存查询记录
         db_query = RAGQuery(
             tenant_id=current_user.tenant_id,
@@ -171,7 +168,7 @@ async def rag_query(
         db.add(db_query)
         await db.commit()
         await db.refresh(db_query)
-
+        
         return success_response(
             data={
                 "query_id": db_query.id,
@@ -203,16 +200,16 @@ async def get_query_history(
 ):
     """获取查询历史"""
     from sqlalchemy import select, func
-
+    
     user_id = None if all_users and current_user.is_superuser else current_user.id
-
+    
     # 计数
     count_stmt = select(func.count(RAGQuery.id)).where(RAGQuery.tenant_id == current_user.tenant_id)
     if user_id is not None:
         count_stmt = count_stmt.where(RAGQuery.user_id == user_id)
     count_result = await db.execute(count_stmt)
     total = count_result.scalar() or 0
-
+    
     # 查询
     stmt = select(RAGQuery).where(RAGQuery.tenant_id == current_user.tenant_id)
     if user_id is not None:
@@ -220,7 +217,7 @@ async def get_query_history(
     stmt = stmt.order_by(RAGQuery.created_at.desc()).offset(skip).limit(limit)
     result = await db.execute(stmt)
     queries = list(result.scalars().all())
-
+    
     return success_response(
         data={"queries": queries, "total": total},
         message="获取查询历史成功"
@@ -235,17 +232,17 @@ async def get_rag_stats(
     """获取 RAG 统计信息"""
     from sqlalchemy import func
     from app.models.rag import File, DocumentChunk
-
+    
     # 文件数量
     stmt = select(func.count(File.id)).where(File.tenant_id == current_user.tenant_id)
     result = await db.execute(stmt)
     total_files = result.scalar() or 0
-
+    
     # 文档切片数量
     stmt = select(func.count(DocumentChunk.id)).where(DocumentChunk.tenant_id == current_user.tenant_id)
     result = await db.execute(stmt)
     total_chunks = result.scalar() or 0
-
+    
     # 查询数量和平均响应时间
     stmt = select(
         func.count(RAGQuery.id),
@@ -255,7 +252,7 @@ async def get_rag_stats(
     row = result.first()
     total_queries = row[0] or 0
     avg_response_time = row[1] or 0
-
+    
     return success_response(
         data={
             "total_files": total_files,

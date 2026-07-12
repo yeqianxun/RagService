@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -24,7 +24,7 @@ router = APIRouter()
 
 @router.post("/login")
 @limit(LIMIT_LOGIN)
-async def login(payload: LoginRequest, session: AsyncSession = Depends(get_db)):
+async def login(request: Request, payload: LoginRequest, session: AsyncSession = Depends(get_db)):
     """
     用户登录接口
 
@@ -61,6 +61,7 @@ async def login(payload: LoginRequest, session: AsyncSession = Depends(get_db)):
 @router.post("/token", include_in_schema=False)
 @limit(LIMIT_LOGIN)
 async def oauth2_token(
+    request: Request,
     form_data: OAuth2PasswordRequestForm = Depends(),
     session: AsyncSession = Depends(get_db),
 ):

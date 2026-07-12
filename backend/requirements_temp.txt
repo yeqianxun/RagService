@@ -1,0 +1,63 @@
+fastapi
+uvicorn[standard]
+sqlalchemy
+psycopg[binary]
+pgvector
+python-jose[cryptography]
+bcrypt
+pydantic-settings
+python-multipart
+gunicorn
+email-validator
+prometheus-client
+psutil
+
+# API 限流
+slowapi
+limits
+
+# LangChain 最新版本
+langchain
+langchain-chroma
+langchain-community
+langchain-huggingface
+langchain-openai
+langchain-core
+langchain-text-splitters
+
+# 向量数据库
+chromadb
+
+# 文档处理
+pypdf
+python-docx
+python-pptx
+openpyxl
+pandas
+unstructured
+
+# 向量化
+sentence-transformers
+transformers
+torch
+tokenizers
+
+# LLM 交互
+openai
+tiktoken
+
+# 混合检索
+rank-bm25
+
+# 消息记忆
+redis
+
+# 工具库
+numpy
+aiofiles
+pydantic
+python-magic-bin; platform_system == "Windows"
+python-magic; platform_system != "Windows"
+
+# Web UI (可选)
+gradio

@@ -29,16 +29,18 @@ def create_limiter():
         )
         # 测试 Redis 连接
         redis_client.ping()
-        storage = RedisStorage(redis_client)
+        # 构建 Redis storage URI
+        password_part = f":{settings.REDIS_PASSWORD}@" if settings.REDIS_PASSWORD else ""
+        storage_uri = f"redis://{password_part}{settings.REDIS_HOST}:{settings.REDIS_PORT}/{settings.REDIS_DB}"
         logger.info("Using Redis for rate limiting storage")
     except Exception as e:
         # Redis 不可用时降级到内存存储
         logger.warning(f"Failed to connect to Redis for rate limiting: {e}, falling back to memory storage")
-        storage = MemoryStorage()
+        storage_uri = "memory://"
 
     return Limiter(
         key_func=get_remote_address,
-        storage_uri=storage,
+        storage_uri=storage_uri,
         default_limits=["100 per minute"],
         enabled=True,
         headers_enabled=True,
@@ -55,10 +57,10 @@ def setup_rate_limiter(app):
     """
     # 添加限流中间件
     app.add_middleware(SlowAPIMiddleware)
-    
+
     # 注册限流错误处理
     app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
-    
+
     # 注册自定义限流错误处理（可选）
     @app.exception_handler(RateLimitExceeded)
     async def rate_limit_exceeded_handler(request: Request, exc: RateLimitExceeded):
@@ -72,7 +74,7 @@ def setup_rate_limiter(app):
             },
             headers=exc.headers
         )
-    
+
     # 存储限流器实例到 app 状态中
     app.state.limiter = limiter
     logger.info("Rate limiter setup completed")
