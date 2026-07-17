@@ -100,6 +100,5 @@ def limit(limit_value: str, key_func=None, per_method=True, error_message=None):
 
 # 预设的限流策略
 LIMIT_LOGIN = "5 per minute"
-LIMIT_RAG_QUERY = "30 per minute"
 LIMIT_FILE_UPLOAD = "10 per hour"
 LIMIT_USER_CREATE = "5 per hour"

@@ -43,7 +43,7 @@ async def login(request: Request, payload: LoginRequest, session: AsyncSession =
     user = await authenticate_user(
         session=session,
         tenant_code=payload.tenant_code,
-        email=payload.email,
+        email=str(payload.email),
         password=payload.password,
     )
     if user is None:

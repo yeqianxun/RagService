@@ -12,7 +12,7 @@ class Settings(BaseSettings):
         case_sensitive=False,
         extra="ignore",
     )
-    APP_NAME: str = "FastAPI Rag + Agent System"
+    APP_NAME: str = "FastAPI Multi-Tenant System"
     APP_VERSION: str = "1.0.0"
     API_V1_PREFIX: str = "/api/v1"
     DEBUG: bool = True
@@ -21,7 +21,7 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 120
 
-    DATABASE_URL: str = "postgresql+psycopg://postgres:password@localhost:5432/rag_service"
+    DATABASE_URL: str = "postgresql+psycopg://postgres:Qq124094@localhost:5432/rag_service"
     CORS_ORIGINS: list[str] = Field(
         default_factory=lambda: [
             "http://localhost:5173",
@@ -31,37 +31,13 @@ class Settings(BaseSettings):
     )
     UPLOAD_DIR: str = "./uploads"
     LOG_DIR: str = "./logs"
-    
-    # RAG 相关配置
-    CHROMA_HOST: str = "localhost"
-    CHROMA_PORT: int = 8000
-    CHROMA_COLLECTION_NAME: str = "rag_documents"
-    EMBEDDING_MODEL: str = "BAAI/bge-small-zh-v1.5"
-    EMBEDDING_MODEL_DEVICE: str = "cpu"
-    CHUNK_SIZE: int = 1000
-    CHUNK_OVERLAP: int = 200
-    MAX_FILE_SIZE_MB: int = 100
-    TOP_K_RETRIEVAL: int = 5
-    BM25_ENABLED: bool = True
-    BM25_K1: float = 1.5
-    BM25_B: float = 0.75
-    
-    # LLM 配置 - DeepSeek
-    LLM_API_BASE: str = "https://api.deepseek.com/v1"
-    LLM_API_KEY: str = "your-deepseek-api-key"
-    LLM_MODEL_NAME: str = "deepseek-chat"
-    LLM_TEMPERATURE: float = 0.7
-    LLM_MAX_TOKENS: int = 2000
-    
+
     # Redis 配置
     REDIS_HOST: str = "localhost"
     REDIS_PORT: int = 6379
     REDIS_DB: int = 0
     REDIS_PASSWORD: Optional[str] = None
-    REDIS_TTL_SECONDS: int = 86400  # 24小时
-    
-    # 聊天历史配置
-    CHAT_HISTORY_MAX_TURNS: int = 50
+    REDIS_TTL_SECONDS: int = 86400  # 24 hours
 
     DEFAULT_TENANT_NAME: str = "Platform Tenant"
     DEFAULT_TENANT_CODE: str = "platform"

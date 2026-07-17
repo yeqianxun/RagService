@@ -61,27 +61,6 @@ BUILT_IN_PERMISSIONS: dict[str, dict[str, str]] = {
         "module": "permission",
         "description": "给角色分配或移除权限",
     },
-    # RAG 管理
-    "rag:read": {
-        "name": "查看 RAG 数据",
-        "module": "rag",
-        "description": "查看文件列表、查询历史等 RAG 相关数据",
-    },
-    "rag:upload": {
-        "name": "上传 RAG 文件",
-        "module": "rag",
-        "description": "上传文件到 RAG 知识库",
-    },
-    "rag:delete": {
-        "name": "删除 RAG 文件",
-        "module": "rag",
-        "description": "从 RAG 知识库删除文件",
-    },
-    "rag:query": {
-        "name": "RAG 查询",
-        "module": "rag",
-        "description": "使用 RAG 功能进行查询问答",
-    },
 }
 
 # 默认租户管理员权限（不包含 tenant:create 等敏感权限）
@@ -92,10 +71,6 @@ DEFAULT_ADMIN_PERMISSION_CODES = [
     "user:upload",
     "permission:read",
     "permission:assign",
-    "rag:read",
-    "rag:upload",
-    "rag:delete",
-    "rag:query",
 ]
 
 # 平台超级管理员拥有全部权限
@@ -194,7 +169,6 @@ async def initialize_database() -> None:
     创建所有数据库表，然后插入默认数据。
     """
     async with engine.begin() as connection:
-        await connection.execute(text('CREATE EXTENSION IF NOT EXISTS vector'))
         await connection.run_sync(Base.metadata.create_all)
 
     async with AsyncSessionLocal() as session:

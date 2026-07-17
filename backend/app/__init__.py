@@ -6,6 +6,5 @@ from .models import tenant
 from .models import role
 from .models import permission
 from .models import user
-from .models import vector_store
 
 __all__ = ["app"]
