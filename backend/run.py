@@ -1,4 +1,4 @@
-"""启动脚本 - 在 Windows 上设置 SelectorEventLoop 以避免 psycopg 兼容性问题"""
+"""启动脚本 - 在 Windows 上设置 SelectorEventLoop 以保证异步 IO 正常"""
 import asyncio
 import platform
 

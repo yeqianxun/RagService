@@ -27,14 +27,12 @@ def check_dependencies():
     required_packages = [
         "fastapi",
         "sqlalchemy",
-        "asyncpg",
-        "psycopg",
-        "pgvector",
+        "asyncmy",
         "uvicorn",
         "gunicorn",
         "pydantic_settings",
         "python_jose",
-        "passlib",
+        "bcrypt",
         "python_multipart",
         "email_validator"
     ]
@@ -92,8 +90,7 @@ def check_database_connection():
     except Exception as e:
         print(f"❌ 数据库连接失败: {e}")
         print("请确保:")
-        print("- PostgreSQL 服务正在运行")
-        print("- pgvector 扩展已安装并启用")
+        print("- MySQL 服务正在运行")
         print("- DATABASE_URL 配置正确")
         print("- .env 文件已正确配置")
         return False

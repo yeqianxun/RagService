@@ -16,7 +16,7 @@ from app.middlewares import AccessLogMiddleware
 from app.monitoring.metrics import MetricsMiddleware, setup_metrics
 from app.monitoring.system_collector import system_collector_loop
 
-# Windows 上 psycopg 异步模式需要使用 SelectorEventLoop
+# Windows 上需要使用 SelectorEventLoop 以保证异步 IO 正常工作
 if platform.system() == "Windows":
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 

@@ -21,7 +21,7 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 120
 
-    DATABASE_URL: str = "postgresql+psycopg://postgres:Qq124094@localhost:5432/rag_service"
+    DATABASE_URL: str = "mysql+asyncmy://root:Qq124094@localhost:3306/multi_tenant_system"
     CORS_ORIGINS: list[str] = Field(
         default_factory=lambda: [
             "http://localhost:5173",
