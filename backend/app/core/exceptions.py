@@ -17,7 +17,6 @@ class ErrorCode:
 class AppErrorCode:
     """所有业务错误码常量"""
     # 400 Bad Request
-    TENANT_EXISTS = ErrorCode(400, 4001, "租户名称或编码已存在")
     USER_EXISTS = ErrorCode(400, 4002, "邮箱或用户名已存在")
     INVALID_FILE_TYPE = ErrorCode(400, 4003, "不支持的文件类型")
     FILE_PROCESS_ERROR = ErrorCode(400, 4004, "文件处理失败")
@@ -25,7 +24,7 @@ class AppErrorCode:
     # 401 Unauthorized
     INVALID_TOKEN = ErrorCode(401, 4010, "认证信息无效")
     USER_NOT_FOUND = ErrorCode(401, 4011, "用户不存在")
-    INVALID_CREDENTIALS = ErrorCode(401, 4012, "租户、账号或密码错误")
+    INVALID_CREDENTIALS = ErrorCode(401, 4012, "账号或密码错误")
 
     # 403 Forbidden
     USER_DISABLED = ErrorCode(403, 4030, "用户已被禁用")
@@ -33,7 +32,7 @@ class AppErrorCode:
 
     # 404 Not Found
     USER_NOT_EXIST = ErrorCode(404, 4041, "用户不存在")
-    ROLE_NOT_FOUND = ErrorCode(404, 4042, "角色不存在或不属于当前租户")
+    ROLE_NOT_FOUND = ErrorCode(404, 4042, "角色不存在")
     PERMISSION_NOT_FOUND = ErrorCode(404, 4043, "权限不存在")
     FILE_NOT_FOUND = ErrorCode(404, 4044, "文件不存在")
 

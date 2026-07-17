@@ -40,7 +40,7 @@ async def get_users(
     """
     获取用户列表接口
 
-    该接口返回当前用户所在租户下的所有用户列表。
+    该接口返回所有用户列表。
 
     Args:
         current_user (User): 当前用户，需要有 "user:read" 权限
@@ -49,7 +49,7 @@ async def get_users(
     Returns:
         JSONResponse: 包含用户列表的成功响应
     """
-    users = await list_users(session, current_user.tenant_id)
+    users = await list_users(session)
     data = [UserRead.model_validate(user, from_attributes=True) for user in users]
     return success_response(data=data, message="获取用户列表成功")
 
@@ -63,7 +63,7 @@ async def create_user_endpoint(
     """
     创建用户接口
 
-    该接口允许有 "user:create" 权限的用户在其所属租户内创建新用户。
+    该接口允许有 "user:create" 权限的用户创建新用户。
 
     Args:
         payload (UserCreate): 包含新用户信息的创建请求数据
@@ -73,7 +73,7 @@ async def create_user_endpoint(
     Returns:
         JSONResponse: 包含新创建用户信息的成功响应
     """
-    user = await create_user(session, current_user.tenant_id, payload)
+    user = await create_user(session, payload)
     return success_response(
         data=UserRead.model_validate(user, from_attributes=True),
         message="创建用户成功",
@@ -88,7 +88,7 @@ async def get_roles(
     """
     获取角色列表接口
 
-    该接口返回当前用户所在租户下的所有角色列表。
+    该接口返回所有角色列表。
 
     Args:
         current_user (User): 当前活跃用户
@@ -97,7 +97,7 @@ async def get_roles(
     Returns:
         JSONResponse: 包含角色列表的成功响应
     """
-    stmt = select(Role).where(Role.tenant_id == current_user.tenant_id).order_by(Role.id.asc())
+    stmt = select(Role).order_by(Role.id.asc())
     roles = (await session.execute(stmt)).scalars().all()
     data = [RoleInfo.model_validate(role, from_attributes=True) for role in roles]
     return success_response(data=data, message="获取角色列表成功")
@@ -122,7 +122,7 @@ async def upload_file(
     Returns:
         JSONResponse: 包含上传文件路径和文件名的成功响应
     """
-    file_path = await save_upload(file, current_user.tenant_id)
+    file_path = await save_upload(file)
     background_tasks.add_task(process_uploaded_file, file_path, current_user.id)
     return success_response(
         data={"file_path": file_path, "filename": file.filename},
@@ -139,7 +139,7 @@ async def get_user(
     """
     获取特定用户信息接口
 
-    该接口返回指定用户ID的用户详细信息，仅限于当前用户所在租户内的用户。
+    该接口返回指定用户ID的用户详细信息。
 
     Args:
         user_id (int): 要查询的用户ID
@@ -149,7 +149,7 @@ async def get_user(
     Returns:
         JSONResponse: 包含指定用户详细信息的成功响应
     """
-    user = await get_user_detail(session, current_user.tenant_id, user_id)
+    user = await get_user_detail(session, user_id)
     return success_response(
         data=UserProfile.model_validate(user, from_attributes=True),
         message="获取用户详情成功",

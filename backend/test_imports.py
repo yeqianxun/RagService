@@ -17,27 +17,20 @@ except Exception as e:
 
 try:
     print("3. 导入 base 模型...")
-    from app.models.base import Base, TimestampMixin, TenantScopedMixin
+    from app.models.base import Base, TimestampMixin
     print("   base 模型导入成功")
 except Exception as e:
     print(f"   base 模型导入失败: {e}")
 
 try:
-    print("4. 导入 Tenant 模型...")
-    from app.models.tenant import Tenant
-    print("   Tenant 模型导入成功")
-except Exception as e:
-    print(f"   Tenant 模型导入失败: {e}")
-
-try:
-    print("5. 导入 Role 模型...")
+    print("4. 导入 Role 模型...")
     from app.models.role import Role
     print("   Role 模型导入成功")
 except Exception as e:
     print(f"   Role 模型导入失败: {e}")
 
 try:
-    print("6. 导入 User 模型...")
+    print("5. 导入 User 模型...")
     from app.models.user import User
     print("   User 模型导入成功")
 except Exception as e:

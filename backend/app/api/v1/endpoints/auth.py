@@ -28,28 +28,27 @@ async def login(request: Request, payload: LoginRequest, session: AsyncSession =
     """
     用户登录接口
 
-    该接口接收租户代码、邮箱和密码进行身份验证，如果验证成功则返回访问令牌和用户信息。
+    该接口接收邮箱和密码进行身份验证，如果验证成功则返回访问令牌和用户信息。
 
     Args:
-        payload (LoginRequest): 包含租户代码、邮箱和密码的登录请求数据
+        payload (LoginRequest): 包含邮箱和密码的登录请求数据
         session (AsyncSession): 数据库异步会话依赖
 
     Returns:
         JSONResponse: 包含访问令牌、过期时间及用户信息的成功响应
 
     Raises:
-        AppException: 当租户、账号或密码错误时抛出401异常
+        AppException: 当账号或密码错误时抛出401异常
     """
     user = await authenticate_user(
         session=session,
-        tenant_code=payload.tenant_code,
         email=str(payload.email),
         password=payload.password,
     )
     if user is None:
         raise AppException.from_error(AppErrorCode.INVALID_CREDENTIALS)
 
-    token = create_access_token(subject=user.email, tenant_id=user.tenant_id, is_superuser=user.is_superuser)
+    token = create_access_token(subject=user.email, is_superuser=user.is_superuser)
     data = TokenData(
         access_token=token,
         expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
@@ -69,35 +68,19 @@ async def oauth2_token(
     OAuth2 token 端点（兼容 Swagger Authorize 弹窗）
 
     该端点接收 application/x-www-form-urlencoded 格式的请求，
-    支持两种 username 格式：
-      1. "租户编码/邮箱"（例如 "platform/admin@example.com"）
-      2. 仅邮箱（例如 "admin@example.com"），此时使用默认租户编码
-
-    password 字段为登录密码。
+    username 字段为邮箱，password 字段为登录密码。
 
     此端点不显示在 Swagger 文档中，仅用于 Authorize 弹窗的自动认证流程。
     """
-    # 解析 username 为 tenant_code 和 email
-    if "/" in form_data.username:
-        tenant_code, email = form_data.username.split("/", 1)
-        tenant_code = tenant_code.strip()
-    else:
-        # 未指定租户时使用默认租户编码
-        tenant_code = settings.DEFAULT_TENANT_CODE
-        email = form_data.username
-
-    email = email.strip()
-
     user = await authenticate_user(
         session=session,
-        tenant_code=tenant_code,
-        email=email,
+        email=form_data.username.strip(),
         password=form_data.password,
     )
     if user is None:
         raise AppException.from_error(AppErrorCode.INVALID_CREDENTIALS)
 
-    token = create_access_token(subject=user.email, tenant_id=user.tenant_id, is_superuser=user.is_superuser)
+    token = create_access_token(subject=user.email, is_superuser=user.is_superuser)
     return OAuth2TokenResponse(
         access_token=token,
         expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,

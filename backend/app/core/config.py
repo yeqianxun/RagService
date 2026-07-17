@@ -12,7 +12,7 @@ class Settings(BaseSettings):
         case_sensitive=False,
         extra="ignore",
     )
-    APP_NAME: str = "FastAPI Multi-Tenant System"
+    APP_NAME: str = "FastAPI RAG System"
     APP_VERSION: str = "1.0.0"
     API_V1_PREFIX: str = "/api/v1"
     DEBUG: bool = True
@@ -21,7 +21,7 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 120
 
-    DATABASE_URL: str = "mysql+asyncmy://root:Qq124094@localhost:3306/multi_tenant_system"
+    DATABASE_URL: str = "postgresql+asyncpg://postgres:password@localhost:5432/rag_db"
     CORS_ORIGINS: list[str] = Field(
         default_factory=lambda: [
             "http://localhost:5173",
@@ -39,19 +39,13 @@ class Settings(BaseSettings):
     REDIS_PASSWORD: Optional[str] = None
     REDIS_TTL_SECONDS: int = 86400  # 24 hours
 
-    DEFAULT_TENANT_NAME: str = "Platform Tenant"
-    DEFAULT_TENANT_CODE: str = "platform"
     DEFAULT_ADMIN_EMAIL: str = "admin@example.com"
     DEFAULT_ADMIN_PASSWORD: str = "Admin@123456"
     DEFAULT_ADMIN_FULL_NAME: str = "Platform Admin"
 
-    # Milvus 配置
-    MILVUS_HOST: str = "localhost"
-    MILVUS_PORT: int = 19530
-    MILVUS_COLLECTION_NAME: str = "document_chunks"
-
     # Embedding 配置
     EMBEDDING_MODEL: str = "sentence-transformers/all-MiniLM-L6-v2"
+    EMBEDDING_DIMENSIONS: int = 384  # all-MiniLM-L6-v2 的维度
 
     # 文档切分配置
     CHUNK_SIZE: int = 1000

@@ -5,14 +5,12 @@ from app.schemas.permission import PermissionSummary
 
 
 class LoginRequest(BaseModel):
-    tenant_code: str = Field(..., min_length=2, max_length=50)
     email: EmailStr
     password: str = Field(..., min_length=6, max_length=128)
 
 
 class TokenPayload(BaseModel):
     sub: str
-    tenant_id: int
     exp: int
 
 
@@ -24,7 +22,6 @@ class RoleInfo(ORMModel):
 
 class CurrentUserInfo(ORMModel):
     id: int
-    tenant_id: int
     username: str
     email: EmailStr
     full_name: str | None = None

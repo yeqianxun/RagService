@@ -45,15 +45,14 @@ def get_password_hash(password: str) -> str:
     return hashed_bytes.decode("utf-8")
 
 
-def create_access_token(subject: str, tenant_id: int, is_superuser: bool = False, expires_delta: timedelta | None = None) -> str:
+def create_access_token(subject: str, is_superuser: bool = False, expires_delta: timedelta | None = None) -> str:
     """
     创建JWT访问令牌
 
-    该函数生成一个JWT访问令牌，包含主题（通常是用户邮箱）、租户ID、超级管理员标记和过期时间。
+    该函数生成一个JWT访问令牌，包含主题（通常是用户邮箱）、超级管理员标记和过期时间。
 
     Args:
         subject (str): 令牌的主题，通常是用户邮箱
-        tenant_id (int): 租户ID
         is_superuser (bool): 是否为超级管理员
         expires_delta (timedelta | None): 令牌有效期，如果为None则使用默认设置
 
@@ -65,7 +64,6 @@ def create_access_token(subject: str, tenant_id: int, is_superuser: bool = False
     )
     to_encode: dict[str, Any] = {
         "sub": subject,
-        "tenant_id": tenant_id,
         "is_superuser": is_superuser,
         "exp": expire,
     }
@@ -82,7 +80,7 @@ def decode_access_token(token: str) -> dict[str, Any]:
         token (str): JWT访问令牌
 
     Returns:
-        dict[str, Any]: 令牌中的载荷信息，包括主题、租户ID和过期时间等
+        dict[str, Any]: 令牌中的载荷信息，包括主题和过期时间等
 
     Raises:
         ValueError: 当令牌无效或已过期时抛出异常

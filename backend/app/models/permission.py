@@ -23,7 +23,7 @@ class Permission(Base, TimestampMixin):
     )
     module: Mapped[str] = mapped_column(
         String(50), nullable=False,
-        comment="所属模块，如 user / tenant / system",
+        comment="所属模块，如 user / permission / rag",
     )
 
     roles = relationship("Role", secondary="role_permissions", back_populates="permissions")

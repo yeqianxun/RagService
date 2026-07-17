@@ -7,19 +7,11 @@ from app.db.session import AsyncSessionLocal, engine
 from app.models.base import Base
 from app.models.permission import Permission
 from app.models.role import Role
-from app.models.tenant import Tenant
 from app.models.user import User
 
 
-# 系统预定义权限全集（code -> {name, module, description}）
+# 系统预定义权限全集
 BUILT_IN_PERMISSIONS: dict[str, dict[str, str]] = {
-    # 租户管理
-    "tenant:read": {
-        "name": "查看租户",
-        "module": "tenant",
-        "description": "查看租户基本信息",
-    },
-    # 用户管理
     "user:read": {
         "name": "查看用户",
         "module": "user",
@@ -28,14 +20,13 @@ BUILT_IN_PERMISSIONS: dict[str, dict[str, str]] = {
     "user:create": {
         "name": "创建用户",
         "module": "user",
-        "description": "在当前租户下创建新用户",
+        "description": "创建新用户",
     },
     "user:upload": {
         "name": "上传文件",
         "module": "user",
-        "description": "上传文件到租户存储",
+        "description": "上传文件",
     },
-    # 权限管理
     "permission:read": {
         "name": "查看权限",
         "module": "permission",
@@ -61,7 +52,6 @@ BUILT_IN_PERMISSIONS: dict[str, dict[str, str]] = {
         "module": "permission",
         "description": "给角色分配或移除权限",
     },
-    # RAG 管理
     "rag:read": {
         "name": "查看 RAG 数据",
         "module": "rag",
@@ -84,9 +74,8 @@ BUILT_IN_PERMISSIONS: dict[str, dict[str, str]] = {
     },
 }
 
-# 默认租户管理员权限（不包含 tenant:create 等敏感权限）
+# 默认管理员权限
 DEFAULT_ADMIN_PERMISSION_CODES = [
-    "tenant:read",
     "user:read",
     "user:create",
     "user:upload",
@@ -98,7 +87,7 @@ DEFAULT_ADMIN_PERMISSION_CODES = [
     "rag:query",
 ]
 
-# 平台超级管理员拥有全部权限
+# 超级管理员拥有全部权限
 SUPER_ADMIN_PERMISSION_CODES = list(BUILT_IN_PERMISSIONS.keys())
 
 
@@ -129,34 +118,16 @@ async def seed_permissions(session: AsyncSession) -> dict[str, Permission]:
 
 
 async def seed_default_data(session: AsyncSession) -> None:
-    """
-    初始化默认数据
-
-    创建默认租户、所有预定义权限、管理员角色和超级管理员用户。
-    """
-    # 1. 创建或获取默认租户
-    tenant_stmt = select(Tenant).where(Tenant.code == settings.DEFAULT_TENANT_CODE)
-    tenant = (await session.execute(tenant_stmt)).scalar_one_or_none()
-
-    if tenant is None:
-        tenant = Tenant(name=settings.DEFAULT_TENANT_NAME, code=settings.DEFAULT_TENANT_CODE)
-        session.add(tenant)
-        await session.flush()
-
-    # 2. 种子权限表
+    """初始化默认数据"""
+    # 1. 种子权限表
     permissions_map = await seed_permissions(session)
 
-    # 3. 创建默认管理员角色（如果不存在）
-    role_stmt = select(Role).where(
-        Role.tenant_id == tenant.id,
-        Role.name == "admin",
-    )
+    # 2. 创建默认管理员角色（如果不存在）
+    role_stmt = select(Role).where(Role.name == "admin")
     role = (await session.execute(role_stmt)).scalar_one_or_none()
 
     if role is None:
-        # 权限在 flush 前通过构造函数 setting 分配，避免异步懒加载
         role = Role(
-            tenant_id=tenant.id,
             name="admin",
             description="System administrator",
             permissions=[permissions_map[code] for code in DEFAULT_ADMIN_PERMISSION_CODES],
@@ -164,16 +135,12 @@ async def seed_default_data(session: AsyncSession) -> None:
         session.add(role)
         await session.flush()
 
-    # 4. 创建超级管理员用户（如果不存在）
-    user_stmt = select(User).where(
-        User.tenant_id == tenant.id,
-        User.email == settings.DEFAULT_ADMIN_EMAIL,
-    )
+    # 3. 创建超级管理员用户（如果不存在）
+    user_stmt = select(User).where(User.email == settings.DEFAULT_ADMIN_EMAIL)
     admin_user = (await session.execute(user_stmt)).scalar_one_or_none()
 
     if admin_user is None:
         admin_user = User(
-            tenant_id=tenant.id,
             role_id=role.id,
             username="admin",
             email=settings.DEFAULT_ADMIN_EMAIL,
@@ -188,12 +155,9 @@ async def seed_default_data(session: AsyncSession) -> None:
 
 
 async def initialize_database() -> None:
-    """
-    初始化数据库
-
-    创建所有数据库表，然后插入默认数据。
-    """
+    """初始化数据库 - 启用 pgvector 扩展，创建所有表，然后插入默认数据"""
     async with engine.begin() as connection:
+        await connection.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
         await connection.run_sync(Base.metadata.create_all)
 
     async with AsyncSessionLocal() as session:

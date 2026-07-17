@@ -27,14 +27,15 @@ def check_dependencies():
     required_packages = [
         "fastapi",
         "sqlalchemy",
-        "asyncmy",
+        "asyncpg",
         "uvicorn",
         "gunicorn",
         "pydantic_settings",
         "python_jose",
         "bcrypt",
         "python_multipart",
-        "email_validator"
+        "email_validator",
+        "pgvector"
     ]
     
     missing_packages = []
@@ -71,6 +72,7 @@ def check_database_connection():
         import asyncio
         async def test_connection():
             async with engine.connect() as conn:
+                # PostgreSQL 兼容的测试查询
                 result = await conn.execute(text("SELECT 1"))
                 return result.fetchone()[0]
         
@@ -90,9 +92,10 @@ def check_database_connection():
     except Exception as e:
         print(f"❌ 数据库连接失败: {e}")
         print("请确保:")
-        print("- MySQL 服务正在运行")
+        print("- PostgreSQL 服务正在运行")
         print("- DATABASE_URL 配置正确")
         print("- .env 文件已正确配置")
+        print("- 已安装 pgvector 扩展 (CREATE EXTENSION IF NOT EXISTS vector)")
         return False
 
 

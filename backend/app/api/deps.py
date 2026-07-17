@@ -38,14 +38,13 @@ async def get_current_user(
     try:
         payload = decode_access_token(token)
         user_email = payload["sub"]
-        tenant_id = payload["tenant_id"]
     except (KeyError, ValueError) as exc:
         raise AppException.from_error(AppErrorCode.INVALID_TOKEN) from exc
 
     stmt = (
         select(User)
-        .options(joinedload(User.tenant))
-        .where(User.email == user_email, User.tenant_id == tenant_id)
+        .options(joinedload(User.role))
+        .where(User.email == user_email)
     )
     result = await session.execute(stmt)
     user = result.scalars().first()

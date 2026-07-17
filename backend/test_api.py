@@ -9,7 +9,6 @@ data = urllib.parse.urlencode({
     "grant_type": "password",
     "username": "admin@example.com",
     "password": "Admin@123456",
-    "tenant_code": "platform",
 }).encode()
 req = Request(f"{BASE}/auth/token", data=data, method="POST")
 req.add_header("Content-Type", "application/x-www-form-urlencoded")

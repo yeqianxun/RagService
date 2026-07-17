@@ -21,7 +21,7 @@ from app.services.permission_service import (
     set_role_permissions,
     update_permission,
 )
-from app.services.user_service import get_user_detail
+
 
 router = APIRouter()
 
@@ -105,19 +105,10 @@ async def delete_permission_endpoint(
 @router.get("/roles/{role_id}")
 async def get_role_permissions_endpoint(
     role_id: int,
-    current_user: User = Depends(get_current_active_user),
+    _: User = Depends(get_current_active_user),
     session: AsyncSession = Depends(get_db),
 ):
     """获取角色已分配的权限"""
-    user_detail = await get_user_detail(session, current_user.tenant_id, current_user.id)
-    if not current_user.is_superuser:
-        # 普通用户只能查看自己租户下的角色
-        from app.models.role import Role
-        role = await session.get(Role, role_id)
-        if role is None or role.tenant_id != current_user.tenant_id:
-            from app.core.exceptions import AppException, AppErrorCode
-            raise AppException.from_error(AppErrorCode.ROLE_NOT_FOUND)
-
     permissions = await get_role_permissions(session, role_id)
     data = [PermissionRead.model_validate(p, from_attributes=True) for p in permissions]
     return success_response(data=data, message="获取角色权限成功")
@@ -127,18 +118,10 @@ async def get_role_permissions_endpoint(
 async def set_role_permissions_endpoint(
     role_id: int,
     payload: RolePermissionUpdate,
-    current_user: User = Depends(require_permissions("permission:assign")),
+    _: User = Depends(require_permissions("permission:assign")),
     session: AsyncSession = Depends(get_db),
 ):
     """设置角色的权限（全量替换）"""
-    if not current_user.is_superuser:
-        # 普通管理员只能操作自己租户下的角色
-        from app.models.role import Role
-        role = await session.get(Role, role_id)
-        if role is None or role.tenant_id != current_user.tenant_id:
-            from app.core.exceptions import AppException, AppErrorCode
-            raise AppException.from_error(AppErrorCode.ROLE_NOT_FOUND)
-
     permissions = await set_role_permissions(session, role_id, payload.permission_ids)
     data = [PermissionRead.model_validate(p, from_attributes=True) for p in permissions]
     return success_response(data=data, message="设置角色权限成功")

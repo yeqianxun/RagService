@@ -94,7 +94,7 @@ docker-compose down
 
 ```env
 # 应用配置
-APP_NAME=FastAPI Multi Tenant System
+APP_NAME=FastAPI RAG System
 APP_VERSION=1.0.0
 DEBUG=false  # 生产环境设为 false
 API_V1_PREFIX=/api/v1
@@ -105,7 +105,7 @@ ALGORITHM=HS256
 ACCESS_TOKEN_EXPIRE_MINUTES=120
 
 # 数据库配置
-DATABASE_URL=postgresql+psycopg://username:password@localhost:5432/database_name
+DATABASE_URL=postgresql+asyncpg://username:password@localhost:5432/database_name
 
 # CORS 配置
 CORS_ORIGINS=["https://yourdomain.com"]
@@ -113,9 +113,7 @@ CORS_ORIGINS=["https://yourdomain.com"]
 # 上传目录
 UPLOAD_DIR=./uploads
 
-# 默认租户和管理员配置
-DEFAULT_TENANT_NAME=Platform Tenant
-DEFAULT_TENANT_CODE=platform
+# 默认管理员配置
 DEFAULT_ADMIN_EMAIL=admin@yourdomain.com
 DEFAULT_ADMIN_PASSWORD=SecurePassword123!
 DEFAULT_ADMIN_FULL_NAME=Platform Admin

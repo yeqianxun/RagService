@@ -1,7 +1,8 @@
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, func
+from sqlalchemy import DateTime, func
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+from pgvector.sqlalchemy import Vector
 
 
 class Base(DeclarativeBase):
@@ -18,13 +19,5 @@ class TimestampMixin:
         DateTime(),
         server_default=func.now(),
         onupdate=func.now(),
-        nullable=False,
-    )
-
-
-class TenantScopedMixin:
-    tenant_id: Mapped[int] = mapped_column(
-        ForeignKey("tenants.id", ondelete="CASCADE"),
-        index=True,
         nullable=False,
     )

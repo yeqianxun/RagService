@@ -1,7 +1,6 @@
 from pydantic import BaseModel, EmailStr, Field
 
 from app.schemas.common import ORMModel
-from app.schemas.tenant import TenantSummary
 
 
 class UserCreate(BaseModel):
@@ -14,7 +13,6 @@ class UserCreate(BaseModel):
 
 class UserRead(ORMModel):
     id: int
-    tenant_id: int
     username: str
     email: EmailStr
     full_name: str | None = None
@@ -23,4 +21,4 @@ class UserRead(ORMModel):
 
 
 class UserProfile(UserRead):
-    tenant: TenantSummary
+    pass

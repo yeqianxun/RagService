@@ -2,7 +2,7 @@
 
 ## Backend
 
-新增了一个基于 `FastAPI` 的多租户后端示例，目录位于 `backend/`。
+新增了一个基于 `FastAPI` 的后端示例，目录位于 `backend/`。
 
 - 后端说明文档: `backend/README.md`
 - 应用入口: `backend/app/main.py`

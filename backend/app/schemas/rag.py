@@ -15,14 +15,13 @@ class DocumentChunkRead(ORMModel):
     """
     文档切片读取模型
 
-    用于返回文档切片的完整信息，包括业务数据和向量库关联ID。
+    用于返回文档切片的完整信息。
 
     Fields:
-        id: 切片主键 ID（与 Milvus 中的 chunk_id 关联）
+        id: 切片主键 ID
         file_id: 所属文件 ID
         chunk_index: 切片在文件中的索引位置
-        content: 切片原始文本内容（存储在 MySQL）
-        milvus_id: Milvus 向量库中的记录 ID
+        content: 切片原始文本内容
         created_at: 创建时间
         updated_at: 更新时间
     """
@@ -30,7 +29,6 @@ class DocumentChunkRead(ORMModel):
     file_id: int
     chunk_index: int
     content: str
-    milvus_id: Optional[str] = None
     created_at: datetime
     updated_at: datetime
 
