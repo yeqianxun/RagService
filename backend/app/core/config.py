@@ -45,6 +45,25 @@ class Settings(BaseSettings):
     DEFAULT_ADMIN_PASSWORD: str = "Admin@123456"
     DEFAULT_ADMIN_FULL_NAME: str = "Platform Admin"
 
+    # Milvus 配置
+    MILVUS_HOST: str = "localhost"
+    MILVUS_PORT: int = 19530
+    MILVUS_COLLECTION_NAME: str = "document_chunks"
+
+    # Embedding 配置
+    EMBEDDING_MODEL: str = "sentence-transformers/all-MiniLM-L6-v2"
+
+    # 文档切分配置
+    CHUNK_SIZE: int = 1000
+    CHUNK_OVERLAP: int = 200
+
+    # 检索配置
+    TOP_K_RETRIEVAL: int = 5
+
+    # RAG 文本清洗配置
+    RAG_CLEAN_REMOVE_LINKS: bool = True
+    RAG_MIN_SEGMENT_LEN: int = 8
+
 
 @lru_cache
 def get_settings() -> Settings:
