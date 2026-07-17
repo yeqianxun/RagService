@@ -5,7 +5,7 @@ RAG 相关 API 端点模块
 采用双库架构：MySQL 存储业务数据，Milvus 存储向量数据。
 """
 
-from fastapi import APIRouter, Depends, UploadFile, File as FastAPIFile, HTTPException, Request
+from fastapi import APIRouter, Depends, UploadFile, File as FastAPIFile, Request
 from pathlib import Path
 from sqlalchemy.ext.asyncio import AsyncSession
 from uuid import uuid4
@@ -14,6 +14,7 @@ from typing import List
 from app.api.deps import get_current_active_user, get_db, require_permissions
 from app.core.config import settings
 from app.core.response import success_response
+from app.core.exceptions import AppException, AppErrorCode
 from app.models.user import User
 from app.models.tenant import Tenant
 from app.schemas.rag import (
@@ -62,7 +63,7 @@ async def upload_and_process_file(
     ext = Path(file.filename).suffix.lower()
     allowed_exts = [".txt", ".pdf", ".docx", ".doc"]
     if ext not in allowed_exts:
-        raise HTTPException(status_code=400, detail="不支持的文件类型")
+        raise AppException.from_error(AppErrorCode.INVALID_FILE_TYPE)
 
     # 按租户创建独立的上传目录
     upload_dir = Path(settings.UPLOAD_DIR) / str(current_user.tenant_id)
@@ -92,7 +93,7 @@ async def upload_and_process_file(
         # 处理出错时清理临时文件
         if file_path.exists():
             file_path.unlink()
-        raise HTTPException(status_code=500, detail=str(e))
+        raise AppException.from_error(AppErrorCode.FILE_PROCESS_ERROR)
 
 
 @router.post("/query", response_model=RAGQueryResponse)
