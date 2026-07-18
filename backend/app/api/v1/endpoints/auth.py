@@ -5,7 +5,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_current_active_user
 from app.core.config import settings
 from app.core.exceptions import AppException, AppErrorCode
-from app.core.rate_limiter import limit, LIMIT_LOGIN
 from app.core.response import success_response
 from app.core.security import create_access_token
 from app.db.session import get_db
@@ -23,7 +22,6 @@ router = APIRouter()
 
 
 @router.post("/login")
-@limit(LIMIT_LOGIN)
 async def login(request: Request, payload: LoginRequest, session: AsyncSession = Depends(get_db)):
     """
     用户登录接口
@@ -58,7 +56,6 @@ async def login(request: Request, payload: LoginRequest, session: AsyncSession =
 
 
 @router.post("/token", include_in_schema=False)
-@limit(LIMIT_LOGIN)
 async def oauth2_token(
     request: Request,
     form_data: OAuth2PasswordRequestForm = Depends(),

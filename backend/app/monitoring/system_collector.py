@@ -96,6 +96,13 @@ def _collect_process() -> None:
 
 async def system_collector_loop() -> None:
     """后台循环：每隔 _COLLECT_INTERVAL 秒采集一次系统指标"""
+    app_logger.info("系统指标采集任务已启动")
     while True:
-        await collect_system_metrics()
-        await asyncio.sleep(_COLLECT_INTERVAL)
+        try:
+            await collect_system_metrics()
+        except Exception as e:
+            # 捕获所有异常，记录日志，但不中断循环
+            app_logger.error(f"采集系统指标时出错: {str(e)}")
+        finally:
+            # 无论成功失败，都等待下一个周期
+            await asyncio.sleep(_COLLECT_INTERVAL)

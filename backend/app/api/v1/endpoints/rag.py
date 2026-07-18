@@ -68,7 +68,8 @@ async def upload_and_process_file(
         db_chunks = await process_file(
             session=session,
             file_path=str(file_path),
-            file_name=file.filename
+            file_name=file.filename,
+            user_id=current_user.id
         )
 
         # 将 ORM 模型转换为 Pydantic schema 并返回
@@ -80,8 +81,7 @@ async def upload_and_process_file(
         raise AppException.from_error(AppErrorCode.FILE_PROCESS_ERROR)
     finally:
         # 成功处理后，根据配置决定是否保留原文件
-        keep_files = getattr(settings, "KEEP_UPLOADED_FILES", False)
-        if not keep_files and db_chunks and file_path.exists():
+        if not settings.KEEP_UPLOADED_FILES and db_chunks and file_path.exists():
             try:
                 file_path.unlink()
             except Exception:
@@ -107,7 +107,8 @@ async def query_rag(
     results = await vector_search(
         query=query_request.query,
         session=session,
-        top_k=query_request.top_k
+        top_k=query_request.top_k,
+        user_id=current_user.id
     )
 
     # 组装并返回响应
@@ -127,6 +128,7 @@ async def delete_rag_file(
     """删除 RAG 文件及其相关向量数据"""
     await delete_file(
         session=session,
-        file_id=file_id
+        file_id=file_id,
+        user_id=current_user.id
     )
     return success_response({"message": "File deleted successfully"})

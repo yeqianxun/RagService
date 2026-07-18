@@ -20,6 +20,9 @@ class AppErrorCode:
     USER_EXISTS = ErrorCode(400, 4002, "邮箱或用户名已存在")
     INVALID_FILE_TYPE = ErrorCode(400, 4003, "不支持的文件类型")
     FILE_PROCESS_ERROR = ErrorCode(400, 4004, "文件处理失败")
+    FILE_TOO_LARGE = ErrorCode(400, 4005, "文件大小超出限制")
+    FILE_INVALID = ErrorCode(400, 4006, "文件无效或已损坏")
+    FILE_NO_VALID_CONTENT = ErrorCode(400, 4007, "文件无有效内容")
 
     # 401 Unauthorized
     INVALID_TOKEN = ErrorCode(401, 4010, "认证信息无效")

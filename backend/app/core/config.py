@@ -21,7 +21,7 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 120
 
-    DATABASE_URL: str = "postgresql+asyncpg://postgres:password@localhost:5432/rag_db"
+    DATABASE_URL: str = "postgresql+asyncpg://postgres:Qq124094@127.0.0.1:5432/rag_db"
     CORS_ORIGINS: list[str] = Field(
         default_factory=lambda: [
             "http://localhost:5173",
@@ -31,13 +31,9 @@ class Settings(BaseSettings):
     )
     UPLOAD_DIR: str = "./uploads"
     LOG_DIR: str = "./logs"
-
-    # Redis 配置
-    REDIS_HOST: str = "localhost"
-    REDIS_PORT: int = 6379
-    REDIS_DB: int = 0
-    REDIS_PASSWORD: Optional[str] = None
-    REDIS_TTL_SECONDS: int = 86400  # 24 hours
+    MAX_FILE_SIZE_MB: int = 100
+    KEEP_UPLOADED_FILES: bool = False
+    PRELOAD_EMBEDDING_MODEL: bool = True
 
     DEFAULT_ADMIN_EMAIL: str = "admin@example.com"
     DEFAULT_ADMIN_PASSWORD: str = "Admin@123456"
@@ -53,6 +49,7 @@ class Settings(BaseSettings):
 
     # 检索配置
     TOP_K_RETRIEVAL: int = 5
+    MIN_SIMILARITY_SCORE: float = 0.1  # 最低相似度阈值
 
     # RAG 文本清洗配置
     RAG_CLEAN_REMOVE_LINKS: bool = True

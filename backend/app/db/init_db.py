@@ -1,13 +1,53 @@
+import asyncio
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from app.core.logging_config import app_logger
 from app.core.security import get_password_hash
 from app.db.session import AsyncSessionLocal, engine
 from app.models.base import Base
 from app.models.permission import Permission
 from app.models.role import Role
 from app.models.user import User
+
+
+async def initialize_with_retry(max_retries=5, retry_delay=2):
+    """
+    带重试的数据库初始化
+    
+    Args:
+        max_retries: 最大重试次数
+        retry_delay: 重试延迟（秒）
+    """
+    for attempt in range(max_retries):
+        try:
+            await initialize_database()
+            return True
+        except Exception as e:
+            if attempt == max_retries - 1:
+                app_logger.error(f"数据库初始化彻底失败（已重试{max_retries}次）")
+                return False
+            app_logger.warning(f"数据库初始化失败（尝试 {attempt+1}/{max_retries}）: {str(e)}")
+            app_logger.info(f"{retry_delay} 秒后重试...")
+            await asyncio.sleep(retry_delay)
+    return False
+
+
+async def initialize_database() -> None:
+    """初始化数据库 - 启用 pgvector 扩展，创建所有表，然后插入默认数据"""
+    app_logger.info("开始初始化数据库...")
+    
+    # 创建数据库表结构
+    async with engine.begin() as connection:
+        await connection.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+        await connection.run_sync(Base.metadata.create_all)
+        app_logger.info("数据库表结构创建完成")
+    
+    # 初始化默认数据
+    async with AsyncSessionLocal() as session:
+        await seed_default_data(session)
+        app_logger.info("默认数据初始化完成")
 
 
 # 系统预定义权限全集
@@ -152,13 +192,3 @@ async def seed_default_data(session: AsyncSession) -> None:
         session.add(admin_user)
 
     await session.commit()
-
-
-async def initialize_database() -> None:
-    """初始化数据库 - 启用 pgvector 扩展，创建所有表，然后插入默认数据"""
-    async with engine.begin() as connection:
-        await connection.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
-        await connection.run_sync(Base.metadata.create_all)
-
-    async with AsyncSessionLocal() as session:
-        await seed_default_data(session)

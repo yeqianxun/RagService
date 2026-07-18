@@ -7,29 +7,29 @@ RAG 业务逻辑服务模块（Services）
 """
 
 import os
-import logging
+import time
 import threading
 import asyncio
-from typing import List, Dict, Any, Optional
+from typing import Optional, List, Dict, Any
 from pathlib import Path
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from langchain_community.document_loaders import TextLoader, PyPDFLoader, Docx2txtLoader
-from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_community.embeddings import HuggingFaceEmbeddings
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_core.documents import Document as LangChainDocument
 
 from app.core.config import settings
+from app.core.exceptions import AppException, AppErrorCode
 from app.models.rag import File, DocumentChunk
 from app.utils.rag_utils import clean_rag_text
 
-logger = logging.getLogger(__name__)
+logger = __import__('app.core.logging_config').core.logging_config.app_logger
+
 
 # ========================================
 # 全局常量配置
 # ========================================
-# 检索最低相似度阈值（过滤无效低分结果）
-MIN_SIMILARITY_SCORE = 0.1
 # 合法文件魔数校验（防止后缀伪造）
 FILE_MAGIC_CHECK = {
     ".pdf": ("%PDF-", 0),
@@ -37,29 +37,93 @@ FILE_MAGIC_CHECK = {
     ".doc": ("PK", 0),
 }
 
-# ========================================
-# 全局线程安全单例
-# ========================================
-# Embedding 模型全局单例（线程安全）
-_embedding_model_instance: Optional[HuggingFaceEmbeddings] = None
-_embedding_model_lock = threading.Lock()
-
 
 # ========================================
-# 工具基础函数
+# Embedding 模型管理器（重构版本）
 # ========================================
-def get_embedding_model() -> HuggingFaceEmbeddings:
-    """获取 Embedding 模型全局单例（双重检查锁、线程安全）"""
-    global _embedding_model_instance
-    if _embedding_model_instance is None:
-        with _embedding_model_lock:
-            if _embedding_model_instance is None:
-                _embedding_model_instance = HuggingFaceEmbeddings(
+
+class EmbeddingModelManager:
+    """Embedding 模型线程安全单例管理器，替代分散全局变量"""
+    def __init__(self):
+        # 可重入锁，避免加载内部递归调用死锁
+        self._lock: threading.RLock = threading.RLock()
+        # 条件变量：替代自旋忙等，线程阻塞释放CPU
+        self._cond: threading.Condition = threading.Condition(self._lock)
+
+        self._instance: Optional[HuggingFaceEmbeddings] = None
+        self._initialized: bool = False
+        self._loading: bool = False
+        # 加载超时，单位秒
+        self._LOAD_TIMEOUT: float = 300.0
+
+    def get_model(self) -> HuggingFaceEmbeddings:
+        """线程安全获取 embedding 单例，带超时阻塞等待"""
+        # 快速无锁路径：已初始化直接返回
+        if self._initialized:
+            return self._instance
+
+        with self._lock:
+            # 双重检查锁
+            if self._initialized:
+                return self._instance
+
+            # 场景1：其他线程正在加载，阻塞等待（条件变量，不耗CPU）
+            if self._loading:
+                logger.warning(f"Embedding模型[{settings.EMBEDDING_MODEL}] 正在加载，当前线程阻塞等待")
+                # 带超时等待，超时抛异常防止永久卡死
+                wait_success = self._cond.wait_for(
+                    predicate=lambda: self._initialized,
+                    timeout=self._LOAD_TIMEOUT
+                )
+                if not wait_success:
+                    raise TimeoutError(f"Embedding模型加载等待超时({self._LOAD_TIMEOUT}s)，加载进程卡死")
+                return self._instance
+
+            # 场景2：当前线程负责加载模型
+            self._loading = True
+            start_time = time.perf_counter()
+            try:
+                logger.info(f"开始加载Embedding模型: {settings.EMBEDDING_MODEL}")
+                # 局部变量完整构造，避免半初始化
+                temp_model = HuggingFaceEmbeddings(
                     model_name=settings.EMBEDDING_MODEL,
                     model_kwargs={"device": "cpu"},
                     encode_kwargs={"normalize_embeddings": True}
                 )
-    return _embedding_model_instance
+                cost = round(time.perf_counter() - start_time, 2)
+                logger.info(f"Embedding模型加载完成，耗时{cost}s")
+
+                # 原子更新全局状态
+                self._instance = temp_model
+                self._initialized = True
+                # 唤醒所有等待线程
+                self._cond.notify_all()
+                return self._instance
+            except Exception as e:
+                logger.exception(f"Embedding模型加载失败: {settings.EMBEDDING_MODEL}, error={str(e)}")
+                raise
+            finally:
+                # 无论成败重置加载标记
+                self._loading = False
+                # 唤醒等待线程，让他们重新判断状态
+                self._cond.notify_all()
+
+    def reset(self):
+        """测试环境专用：重置单例，方便mock/重加载"""
+        with self._lock:
+            self._instance = None
+            self._initialized = False
+            self._loading = False
+            self._cond.notify_all()
+
+
+# 全局唯一管理器实例，对外暴露统一获取函数
+_embedding_mgr = EmbeddingModelManager()
+
+
+def get_embedding_model() -> HuggingFaceEmbeddings:
+    """对外基础函数，保持原有调用方式不变"""
+    return _embedding_mgr.get_model()
 
 
 def check_file_magic(file_path: str, ext: str) -> bool:
@@ -82,7 +146,7 @@ def get_loader(file_path: str):
     ext = Path(file_path).suffix.lower()
     # 校验文件合法性
     if not check_file_magic(file_path, ext):
-        raise ValueError(f"文件类型伪造或损坏: {ext}")
+        raise AppException.from_error(AppErrorCode.FILE_INVALID)
     if ext == ".txt":
         return TextLoader(file_path, encoding="utf-8")
     elif ext == ".pdf":
@@ -90,7 +154,7 @@ def get_loader(file_path: str):
     elif ext in [".docx", ".doc"]:
         return Docx2txtLoader(file_path)
     else:
-        raise ValueError(f"不支持的文件类型: {ext}")
+        raise AppException.from_error(AppErrorCode.INVALID_FILE_TYPE)
 
 
 async def run_sync_in_thread(func, *args, **kwargs):
@@ -105,22 +169,23 @@ async def run_sync_in_thread(func, *args, **kwargs):
 async def process_file(
     session: AsyncSession,
     file_path: str,
-    file_name: str
+    file_name: str,
+    user_id: Optional[int] = None
 ) -> List[DocumentChunk]:
     """完整 RAG 文件处理流程（单数据库架构）"""
     try:
         # 1. 基础文件校验
         file_path_obj = Path(file_path)
         if not file_path_obj.exists() or not file_path_obj.is_file():
-            raise FileNotFoundError(f"文件不存在或非法路径: {file_path}")
+            raise AppException.from_error(AppErrorCode.FILE_NOT_FOUND)
 
         file_size = os.path.getsize(file_path)
-        max_file_size_mb = getattr(settings, "MAX_FILE_SIZE_MB", 100)
-        max_file_size_bytes = max_file_size_mb * 1024 * 1024
+        max_file_size_bytes = settings.MAX_FILE_SIZE_MB * 1024 * 1024
         if file_size > max_file_size_bytes:
-            raise ValueError(
-                f"文件超限: {file_size / 1024 / 1024:.2f}MB，最大支持 {max_file_size_mb}MB"
-            )
+            raise AppException.from_error(AppErrorCode.FILE_TOO_LARGE)
+
+        user_log_prefix = f"[user_id={user_id}]" if user_id else "[system]"
+        logger.info(f"{user_log_prefix} 开始处理文件: {file_name}, 大小={file_size/1024/1024:.2f}MB")
 
         # 2. 线程池执行同步文件加载、清洗、切片
         def _process_file_sync():
@@ -147,7 +212,7 @@ async def process_file(
 
         chunks = await run_sync_in_thread(_process_file_sync)
         if not chunks:
-            raise ValueError("文件处理后无有效可入库内容")
+            raise AppException.from_error(AppErrorCode.FILE_NO_VALID_CONTENT)
 
         # 3. 保存 File 到数据库
         db_file = File(
@@ -178,13 +243,16 @@ async def process_file(
 
         # 6. 提交事务
         await session.commit()
-        logger.info(f"文件处理完成: {file_name}, 切片数={len(db_chunks)}")
+        logger.info(f"{user_log_prefix} 文件处理完成: file_id={db_file.id}, 文件名={file_name}, 切片数={len(db_chunks)}")
         return db_chunks
 
+    except AppException:
+        await session.rollback()
+        raise
     except Exception as e:
         await session.rollback()
-        logger.error(f"文件处理失败: {file_name}, err={str(e)}", exc_info=True)
-        raise
+        logger.error(f"{user_log_prefix} 文件处理失败: file_name={file_name}, err={str(e)}", exc_info=True)
+        raise AppException.from_error(AppErrorCode.FILE_PROCESS_ERROR)
 
 
 # ========================================
@@ -192,30 +260,47 @@ async def process_file(
 # ========================================
 async def delete_file(
     session: AsyncSession,
-    file_id: int
+    file_id: int,
+    user_id: Optional[int] = None
 ) -> bool:
-    """删除文件及其相关向量数据"""
+    """删除文件及其相关向量数据，同时清理磁盘文件"""
     try:
+        user_log_prefix = f"[user_id={user_id}]" if user_id else "[system]"
+        logger.info(f"{user_log_prefix} 开始删除文件: file_id={file_id}")
+
         # 查询文件
         stmt = select(File).where(File.id == file_id)
         result = await session.execute(stmt)
         db_file = result.scalar_one_or_none()
 
         if not db_file:
-            logger.warning(f"删除文件不存在: file_id={file_id}")
+            logger.warning(f"{user_log_prefix} 删除文件不存在: file_id={file_id}")
             return False
 
-        # 删除文件，通过级联删除自动删除关联的 DocumentChunk
+        # 1. 先删除磁盘文件，避免数据不一致
+        file_path = Path(db_file.file_path)
+        if file_path.exists():
+            try:
+                file_path.unlink()
+                logger.info(f"{user_log_prefix} 已删除磁盘文件: file_id={file_id}, 路径={db_file.file_path}")
+            except Exception as e:
+                logger.warning(f"{user_log_prefix} 删除磁盘文件失败: file_id={file_id}, path={db_file.file_path}, err={str(e)}")
+                # 磁盘删除失败不阻止数据库删除，继续执行
+
+        # 2. 删除数据库记录，通过级联删除自动删除关联的 DocumentChunk
         await session.delete(db_file)
         await session.commit()
 
-        logger.info(f"文件删除成功: file_id={file_id}")
+        logger.info(f"{user_log_prefix} 文件删除完成: file_id={file_id}, 文件名={db_file.filename}")
         return True
 
+    except AppException:
+        await session.rollback()
+        raise
     except Exception as e:
         await session.rollback()
-        logger.error(f"文件删除失败: file_id={file_id}, err={str(e)}", exc_info=True)
-        raise
+        logger.error(f"{user_log_prefix} 文件删除失败: file_id={file_id}, err={str(e)}", exc_info=True)
+        raise AppException.from_error(AppErrorCode.FILE_PROCESS_ERROR)
 
 
 # ========================================
@@ -224,22 +309,32 @@ async def delete_file(
 async def vector_search(
     query: str,
     session: AsyncSession,
-    top_k: int = 5
+    top_k: int = 5,
+    user_id: Optional[int] = None
 ) -> List[Dict[str, Any]]:
-    """向量检索（使用 pgvector 进行相似度搜索）"""
+    """向量检索（使用 pgvector 原生相似度搜索，避免重复计算）"""
     if not query or not query.strip():
         return []
+
+    user_log_prefix = f"[user_id={user_id}]" if user_id else "[system]"
+    logger.info(f"{user_log_prefix} 开始向量检索: 查询长度={len(query)}, top_k={top_k}")
 
     # 1. 生成查询向量
     embeddings = get_embedding_model()
     query_embedding = await run_sync_in_thread(embeddings.embed_query, query.strip())
 
-    # 2. pgvector 相似度搜索（使用余弦距离，因为我们的向量已经归一化）
+    # 2. pgvector 原生相似度搜索，直接在数据库计算距离
+    # 对于归一化向量，余弦相似度 = 1 - 余弦距离
     stmt = (
-        select(DocumentChunk, File)
+        select(
+            DocumentChunk,
+            File,
+            # 直接在数据库计算相似度
+            (1 - DocumentChunk.embedding.cosine_distance(query_embedding)).label('similarity')
+        )
         .join(File, DocumentChunk.file_id == File.id)
         .order_by(DocumentChunk.embedding.cosine_distance(query_embedding))
-        .limit(top_k * 2)
+        .limit(top_k)
     )
 
     result = await session.execute(stmt)
@@ -248,24 +343,23 @@ async def vector_search(
     if not records:
         return []
 
-    # 3. 计算相似度并过滤
+    # 3. 直接使用数据库计算好的相似度，无需重新计算
     final_results = []
-    for chunk, file in records:
+    for chunk, file, similarity in records:
         if chunk.embedding is None:
             continue
 
-        # 计算余弦相似度（对于归一化的向量，就是点积）
-        cosine_similarity = float(sum(a * b for a, b in zip(chunk.embedding, query_embedding)))
-        if cosine_similarity < MIN_SIMILARITY_SCORE:
+        # 检查相似度阈值
+        similarity_float = float(similarity) if similarity is not None else 0.0
+        if similarity_float < settings.MIN_SIMILARITY_SCORE:
             continue
 
         final_results.append({
             "content": chunk.content,
-            "score": float(cosine_similarity),
+            "score": similarity_float,
             "file_name": file.filename,
             "chunk_index": chunk.chunk_index
         })
 
-    # 4. 按相似度降序排列并截取 top_k
-    final_results.sort(key=lambda x: x["score"], reverse=True)
-    return final_results[:top_k]
+    logger.info(f"{user_log_prefix} 向量检索完成: 结果数={len(final_results)}, top_k={top_k}")
+    return final_results
