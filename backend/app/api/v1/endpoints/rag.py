@@ -20,9 +20,10 @@ from app.schemas.rag import (
     FileRead,
     RAGQueryRequest,
     RAGQueryResponse,
-    RAGQueryResult
+    RAGQueryResult,
+    KBDeleteResponse
 )
-from app.services.rag_service import process_file, vector_search, delete_file
+from app.services.rag_service import process_file, vector_search, delete_file, delete_kb_all
 
 
 # 创建 RAG 路由组
@@ -33,6 +34,7 @@ router = APIRouter(tags=["RAG"])
 async def upload_and_process_file(
     request: Request,
     file: UploadFile = FastAPIFile(...),
+    kb_id: int = 1,  # 新增：可选知识库ID，默认为1
     current_user: User = Depends(require_permissions("rag:upload")),
     session: AsyncSession = Depends(get_db),
 ):
@@ -69,7 +71,8 @@ async def upload_and_process_file(
             session=session,
             file_path=str(file_path),
             file_name=file.filename,
-            user_id=current_user.id
+            user_id=current_user.id,
+            kb_id=kb_id
         )
 
         # 将 ORM 模型转换为 Pydantic schema 并返回
@@ -108,7 +111,8 @@ async def query_rag(
         query=query_request.query,
         session=session,
         top_k=query_request.top_k,
-        user_id=current_user.id
+        user_id=current_user.id,
+        kb_id=query_request.kb_id
     )
 
     # 组装并返回响应
@@ -122,6 +126,7 @@ async def query_rag(
 async def delete_rag_file(
     request: Request,
     file_id: int,
+    kb_id: Optional[int] = None,  # 新增：可选知识库ID验证
     current_user: User = Depends(require_permissions("rag:delete")),
     session: AsyncSession = Depends(get_db),
 ):
@@ -129,6 +134,23 @@ async def delete_rag_file(
     await delete_file(
         session=session,
         file_id=file_id,
-        user_id=current_user.id
+        user_id=current_user.id,
+        kb_id=kb_id
     )
     return success_response({"message": "File deleted successfully"})
+
+
+@router.delete("/kb/{kb_id}", response_model=KBDeleteResponse)
+async def delete_rag_kb_all(
+    request: Request,
+    kb_id: int,
+    current_user: User = Depends(require_permissions("rag:delete")),
+    session: AsyncSession = Depends(get_db),
+):
+    """批量删除指定知识库的所有文件及其相关向量数据"""
+    delete_stats = await delete_kb_all(
+        session=session,
+        kb_id=kb_id,
+        user_id=current_user.id
+    )
+    return KBDeleteResponse(**delete_stats)

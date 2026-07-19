@@ -16,7 +16,7 @@ from app.db.session import engine
 from app.middlewares import AccessLogMiddleware
 from app.monitoring.metrics import MetricsMiddleware, setup_metrics
 from app.monitoring.system_collector import system_collector_loop
-from app.services.rag_service import get_embedding_model
+from app.services.rag_service import get_global_executor, shutdown_global_executor, warmup_embedding_model
 
 
 # Windows 上必须使用 SelectorEventLoop，避免和 asyncpg 兼容性问题
@@ -92,18 +92,15 @@ async def background_initialization():
         else:
             app_logger.error("数据库初始化失败，将在首次请求时尝试")
 
-        # 预加载 Embedding 模型（可选）
+        # 预热 Embedding 模型（后台非阻塞）
         if settings.PRELOAD_EMBEDDING_MODEL:
             try:
-                app_logger.info("开始后台加载 Embedding 模型...")
-                loop = asyncio.get_running_loop()
-                await loop.run_in_executor(None, get_embedding_model)
-                app_logger.info("Embedding 模型加载完成")
+                app_logger.info("开始后台预热 Embedding 模型...")
+                warmup_embedding_model()
+                app_logger.info("Embedding 模型后台预热已启动（不阻塞）")
             except Exception as e:
-                app_logger.warning(f"Embedding 模型预加载失败: {str(e)}")
-                app_logger.warning("Embedding 加载堆栈:")
-                app_logger.warning(traceback.format_exc())
-                app_logger.info("将在首次 RAG 请求时加载模型")
+                app_logger.warning(f"Embedding 模型后台预热启动失败: {str(e)}")
+                app_logger.warning("将在首次 RAG 请求时加载模型")
     except Exception as e:
         app_logger.error(f"后台初始化异常: {str(e)}")
         app_logger.error("完整堆栈:")
@@ -166,6 +163,14 @@ async def lifespan(_: FastAPI):
         app_logger.info("数据库连接池已成功释放")
     except Exception as e:
         app_logger.error(f"释放数据库连接池时出错: {str(e)}")
+
+    # 关闭全局线程池
+    try:
+        app_logger.info("正在关闭全局线程池...")
+        shutdown_global_executor()
+        app_logger.info("全局线程池已成功关闭")
+    except Exception as e:
+        app_logger.error(f"关闭全局线程池时出错: {str(e)}")
 
 
 def create_app() -> FastAPI:

@@ -17,6 +17,8 @@ class File(Base, TimestampMixin):
     __tablename__ = "files"
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    kb_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True, default=1)  # 知识库ID，默认为1
+    user_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)  # 用户ID，可为空
     filename: Mapped[str] = mapped_column(String(255), nullable=False)
     file_path: Mapped[str] = mapped_column(String(500), nullable=False)
     file_size: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -31,6 +33,8 @@ class DocumentChunk(Base, TimestampMixin):
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
     file_id: Mapped[int] = mapped_column(ForeignKey("files.id", ondelete="CASCADE"), nullable=False)
+    kb_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True, default=1)  # 知识库ID，默认为1
+    user_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)  # 用户ID，可为空
     chunk_index: Mapped[int] = mapped_column(Integer, nullable=False)
     content: Mapped[str] = mapped_column(String, nullable=False)
     embedding: Mapped[list[float]] = mapped_column(Vector(settings.EMBEDDING_DIMENSIONS), nullable=True)

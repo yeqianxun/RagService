@@ -20,6 +20,8 @@ class DocumentChunkRead(ORMModel):
     Fields:
         id: 切片主键 ID
         file_id: 所属文件 ID
+        kb_id: 知识库 ID
+        user_id: 用户 ID
         chunk_index: 切片在文件中的索引位置
         content: 切片原始文本内容
         created_at: 创建时间
@@ -27,6 +29,8 @@ class DocumentChunkRead(ORMModel):
     """
     id: int
     file_id: int
+    kb_id: int
+    user_id: Optional[int] = None
     chunk_index: int
     content: str
     created_at: datetime
@@ -41,6 +45,8 @@ class FileRead(ORMModel):
 
     Fields:
         id: 文件主键 ID
+        kb_id: 知识库 ID
+        user_id: 用户 ID
         filename: 原始文件名
         file_path: 文件在服务器上的存储路径
         file_size: 文件大小（字节）
@@ -50,6 +56,8 @@ class FileRead(ORMModel):
         chunks: 关联的文档切片列表（可选）
     """
     id: int
+    kb_id: int
+    user_id: Optional[int] = None
     filename: str
     file_path: str
     file_size: int
@@ -68,9 +76,11 @@ class RAGQueryRequest(BaseModel):
     Fields:
         query: 用户的查询问题内容（必填，最小长度 1）
         top_k: 返回的最相关结果数量（默认 5，范围 1-20）
+        kb_id: 知识库 ID，可选，用于限制查询范围
     """
     query: str = Field(..., description="查询内容", min_length=1)
     top_k: int = Field(default=5, description="返回的top k结果", ge=1, le=20)
+    kb_id: Optional[int] = Field(default=None, description="知识库ID，可选，用于限制查询范围")
 
 
 class RAGQueryResult(BaseModel):
@@ -103,3 +113,17 @@ class RAGQueryResponse(BaseModel):
     """
     query: str
     results: List[RAGQueryResult]
+
+
+class KBDeleteResponse(BaseModel):
+    """
+    知识库批量删除响应模型
+
+    返回批量删除的统计信息。
+
+    Fields:
+        deleted_files: 删除的文件数量
+        deleted_chunks: 删除的文档切片数量
+    """
+    deleted_files: int
+    deleted_chunks: int

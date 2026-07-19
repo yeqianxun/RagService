@@ -42,6 +42,7 @@ class Settings(BaseSettings):
     # Embedding 配置
     EMBEDDING_MODEL: str = "sentence-transformers/all-MiniLM-L6-v2"
     EMBEDDING_DIMENSIONS: int = 384  # all-MiniLM-L6-v2 的维度
+    EMBEDDING_DEVICE: Optional[str] = None  # 可选：显式指定设备，如 "cuda", "cpu"；None 表示自动检测
 
     # 文档切分配置
     CHUNK_SIZE: int = 1000
@@ -54,6 +55,12 @@ class Settings(BaseSettings):
     # RAG 文本清洗配置
     RAG_CLEAN_REMOVE_LINKS: bool = True
     RAG_MIN_SEGMENT_LEN: int = 8
+
+    # 批次处理配置
+    BATCH_ENCODE_SIZE: int = 32  # 推理批次大小
+    BATCH_STORE_SIZE: int = 100  # 数据库批次大小
+    QUERY_CACHE_SIZE: int = 1000  # 查询向量缓存大小
+    QUERY_CACHE_TTL_SECONDS: int = 3600  # 查询向量缓存过期时间（秒），默认1小时
 
 
 @lru_cache
