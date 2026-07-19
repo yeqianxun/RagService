@@ -12,18 +12,19 @@ import os
 import re
 import math
 import hashlib
+import threading
 from collections import defaultdict
 from typing import Optional, List, Dict, Any, Tuple
 from pathlib import Path
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from langchain_community.document_loaders import TextLoader, PyPDFLoader, Docx2txtLoader
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_huggingface import HuggingFaceEmbeddings
 
 from app.core.config import settings
 from app.core.exceptions import AppException, AppErrorCode
-from app.models.rag import File, DocumentChunk
+from app.models.rag import File, DocumentChunk, KnowledgeBase
 from app.utils.rag_utils import clean_rag_text
 
 
@@ -39,7 +40,7 @@ logger = __import__('app.core.logging_config').core.logging_config.app_logger
 
 
 # 全局 embedding 模型实例
-_embedding_model = None
+_embedding_model: HuggingFaceEmbeddings | None = None
 
 # BM25 相关全局变量
 _bm25_index = None
@@ -185,29 +186,73 @@ async def rebuild_bm25_index(session: AsyncSession, kb_id: Optional[int] = None)
     return _bm25_index
 
 
+
+class EmbeddingModelSingleton:
+    _instance: HuggingFaceEmbeddings | None = None
+    _lock = threading.Lock()
+
+    @classmethod
+    def get_instance(cls) -> HuggingFaceEmbeddings:
+        if cls._instance is not None:
+            return cls._instance
+
+        with cls._lock:
+            if cls._instance is not None:
+                return cls._instance
+
+            device = "cpu"
+            try:
+                import torch
+                if torch.cuda.is_available():
+                    device = "cuda"
+            except Exception as e:
+                logger.warning(f"GPU检测失败，使用CPU: {e}")
+
+            try:
+                logger.info(f"加载模型 {settings.EMBEDDING_MODEL}，设备 {device}")
+                cls._instance = HuggingFaceEmbeddings(
+                    model_name=settings.EMBEDDING_MODEL,
+                    model_kwargs={"device": device},
+                    encode_kwargs={"normalize_embeddings": True}
+                )
+            except Exception as e:
+                logger.error("模型加载失败", exc_info=True)
+                cls._instance = None
+                raise RuntimeError("模型加载失败") from e
+            return cls._instance
+
+    @classmethod
+    def reset(cls):
+        """重置模型实例，释放资源"""
+        with cls._lock:
+            if cls._instance is not None:
+                # 清理模型实例
+                del cls._instance
+                cls._instance = None
+
+                # 触发垃圾回收
+                import gc
+                gc.collect()
+
+                # 清理 CUDA 显存（如果可用）
+                try:
+                    import torch
+                    if torch.cuda.is_available():
+                        torch.cuda.empty_cache()
+                except:
+                    pass
+
+                logger.info("Embedding模型已释放，下次调用将重新加载")
+
+
+# 对外暴露统一入口
 def get_embedding_model() -> HuggingFaceEmbeddings:
-    """
-    获取或初始化 embedding 模型
-    """
-    global _embedding_model
-    if _embedding_model is None:
-        device = "cpu"
-        try:
-            import torch
-            if torch.cuda.is_available():
-                device = "cuda"
-        except ImportError:
-            pass
+    return EmbeddingModelSingleton.get_instance()
 
-        logger.info(f"正在加载 embedding 模型: {settings.EMBEDDING_MODEL}, 设备: {device}")
-        _embedding_model = HuggingFaceEmbeddings(
-            model_name=settings.EMBEDDING_MODEL,
-            model_kwargs={"device": device},
-            encode_kwargs={"normalize_embeddings": True}
-        )
-        logger.info("Embedding 模型加载完成")
-    return _embedding_model
 
+def reset_embedding_model():
+    """重置 embedding 模型，释放内存和显存"""
+    EmbeddingModelSingleton.reset()
 
 def get_loader(file_path: str):
     """根据文件类型获取文档加载器"""
@@ -676,3 +721,169 @@ async def hybrid_search(
 
     logger.info(f"混合检索完成: 结果数={len(final_results)}")
     return final_results
+
+
+# ======================================
+# 知识库管理业务逻辑
+# ======================================
+
+
+async def create_knowledge_base(
+    session: AsyncSession,
+    name: str,
+    description: Optional[str] = None,
+    is_public: bool = False,
+    kb_metadata: Optional[str] = None,
+    user_id: Optional[int] = None
+):
+    """
+    创建知识库
+    """
+    logger.info(f"创建知识库: name={name}, user_id={user_id}")
+
+    db_kb = KnowledgeBase(
+        name=name,
+        description=description,
+        is_public=is_public,
+        kb_metadata=kb_metadata,
+        user_id=user_id
+    )
+    session.add(db_kb)
+    await session.commit()
+    await session.refresh(db_kb)
+
+    logger.info(f"知识库创建成功: id={db_kb.id}")
+    return db_kb
+
+
+async def get_knowledge_base(
+    session: AsyncSession,
+    kb_id: int,
+    user_id: Optional[int] = None
+):
+    """
+    获取单个知识库信息
+    """
+    stmt = select(KnowledgeBase).where(KnowledgeBase.id == kb_id)
+
+    # 如果用户 ID 存在且知识库非公开，则只允许访问自己的知识库
+    if user_id is not None:
+        stmt = stmt.where(
+            (KnowledgeBase.user_id == user_id) | (KnowledgeBase.is_public == True)
+        )
+
+    result = await session.execute(stmt)
+    return result.scalar_one_or_none()
+
+
+async def get_knowledge_bases(
+    session: AsyncSession,
+    user_id: Optional[int] = None,
+    include_public: bool = True
+):
+    """
+    获取知识库列表
+    """
+    stmt = select(KnowledgeBase)
+
+    if user_id is not None:
+        if include_public:
+            stmt = stmt.where(
+                (KnowledgeBase.user_id == user_id) | (KnowledgeBase.is_public == True)
+            )
+        else:
+            stmt = stmt.where(KnowledgeBase.user_id == user_id)
+
+    stmt = stmt.order_by(KnowledgeBase.created_at.desc())
+    result = await session.execute(stmt)
+    return result.scalars().all()
+
+
+async def update_knowledge_base(
+    session: AsyncSession,
+    kb_id: int,
+    user_id: Optional[int] = None,
+    name: Optional[str] = None,
+    description: Optional[str] = None,
+    is_public: Optional[bool] = None,
+    kb_metadata: Optional[str] = None
+):
+    """
+    更新知识库
+    """
+    logger.info(f"更新知识库: kb_id={kb_id}")
+
+    # 获取要更新的知识库
+    stmt = select(KnowledgeBase).where(KnowledgeBase.id == kb_id)
+    if user_id is not None:
+        stmt = stmt.where(KnowledgeBase.user_id == user_id)
+
+    result = await session.execute(stmt)
+    db_kb = result.scalar_one_or_none()
+
+    if not db_kb:
+        logger.warning(f"知识库不存在或无权限: kb_id={kb_id}")
+        return None
+
+    # 更新字段
+    if name is not None:
+        db_kb.name = name
+    if description is not None:
+        db_kb.description = description
+    if is_public is not None:
+        db_kb.is_public = is_public
+    if kb_metadata is not None:
+        db_kb.kb_metadata = kb_metadata
+
+    await session.commit()
+    await session.refresh(db_kb)
+
+    logger.info(f"知识库更新成功: kb_id={kb_id}")
+    return db_kb
+
+
+async def delete_knowledge_base(
+    session: AsyncSession,
+    kb_id: int,
+    user_id: Optional[int] = None
+) -> bool:
+    """
+    删除知识库及其所有内容
+    """
+    logger.info(f"删除知识库: kb_id={kb_id}")
+
+    try:
+        # 获取知识库
+        stmt = select(KnowledgeBase).where(KnowledgeBase.id == kb_id)
+        if user_id is not None:
+            stmt = stmt.where(KnowledgeBase.user_id == user_id)
+
+        result = await session.execute(stmt)
+        db_kb = result.scalar_one_or_none()
+
+        if not db_kb:
+            logger.warning(f"知识库不存在或无权限: kb_id={kb_id}")
+            return False
+
+        # 首先删除磁盘上的文件
+        from sqlalchemy import select as sa_select
+        files_stmt = sa_select(File).where(File.kb_id == kb_id)
+        files_result = await session.execute(files_stmt)
+        files = files_result.scalars().all()
+
+        for file in files:
+            file_path = Path(file.file_path)
+            if file_path.exists():
+                file_path.unlink()
+
+        # 删除数据库记录（通过级联删除）
+        await session.delete(db_kb)
+        await session.commit()
+
+        logger.info(f"知识库删除成功: kb_id={kb_id}")
+        return True
+
+    except Exception as e:
+        await session.rollback()
+        logger.error(f"知识库删除失败: kb_id={kb_id}, 错误: {str(e)}")
+        raise AppException.from_error(AppErrorCode.FILE_PROCESS_ERROR)

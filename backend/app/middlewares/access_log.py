@@ -25,6 +25,7 @@ DEFAULT_SKIP_PATTERNS: list[str] = [
     r"^/docs",
     r"^/redoc",
     r"^/openapi.json",
+    r"^/metrics$",
 ]
 
 

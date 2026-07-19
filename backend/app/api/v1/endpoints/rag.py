@@ -15,15 +15,24 @@ from app.core.config import settings
 from app.core.response import success_response
 from app.core.exceptions import AppException, AppErrorCode
 from app.models.user import User
+from app.models.rag import KnowledgeBase
 from app.schemas.rag import (
     DocumentChunkRead,
     FileRead,
     RAGQueryRequest,
     RAGQueryResponse,
     RAGQueryResult,
-    KBDeleteResponse
+    KBDeleteResponse,
+    KnowledgeBaseCreate,
+    KnowledgeBaseUpdate,
+    KnowledgeBaseRead,
+    KnowledgeBaseWithFiles
 )
-from app.services.rag_service import process_file, vector_search, bm25_search, hybrid_search, delete_file, delete_kb_all
+from app.services.rag_service import (
+    process_file, vector_search, bm25_search, hybrid_search, delete_file, delete_kb_all,
+    create_knowledge_base, get_knowledge_base, get_knowledge_bases, update_knowledge_base, delete_knowledge_base,
+    reset_embedding_model
+)
 
 
 # 创建 RAG 路由组
@@ -177,3 +186,133 @@ async def delete_rag_kb_all(
         user_id=current_user.id
     )
     return KBDeleteResponse(**delete_stats)
+
+
+# ======================================
+# 知识库管理 API 端点
+# ======================================
+
+
+@router.post("/knowledge-base", response_model=KnowledgeBaseRead)
+async def create_kb_endpoint(
+    request: Request,
+    kb_data: KnowledgeBaseCreate,
+    current_user: User = Depends(require_permissions("rag:upload")),
+    session: AsyncSession = Depends(get_db),
+):
+    """创建新的知识库"""
+    db_kb = await create_knowledge_base(
+        session=session,
+        name=kb_data.name,
+        description=kb_data.description,
+        is_public=kb_data.is_public,
+        kb_metadata=kb_data.kb_metadata,
+        user_id=current_user.id
+    )
+    return KnowledgeBaseRead.model_validate(db_kb)
+
+
+@router.get("/knowledge-base/{kb_id}", response_model=KnowledgeBaseWithFiles)
+async def get_kb_endpoint(
+    request: Request,
+    kb_id: int,
+    include_files: bool = False,
+    current_user: User = Depends(require_permissions("rag:query")),
+    session: AsyncSession = Depends(get_db),
+):
+    """获取单个知识库信息"""
+    db_kb = await get_knowledge_base(
+        session=session,
+        kb_id=kb_id,
+        user_id=current_user.id
+    )
+
+    if not db_kb:
+        raise AppException.from_error(AppErrorCode.RESOURCE_NOT_FOUND)
+
+    # 如果需要包含文件信息，则从数据库中加载关联的文件
+    if include_files:
+        from sqlalchemy.orm import selectinload
+        from sqlalchemy import select as sa_select
+
+        stmt = sa_select(KnowledgeBase).options(
+            selectinload(KnowledgeBase.files)
+        ).where(KnowledgeBase.id == kb_id)
+
+        result = await session.execute(stmt)
+        db_kb_with_files = result.scalar_one_or_none()
+        if db_kb_with_files:
+            return KnowledgeBaseWithFiles.model_validate(db_kb_with_files)
+
+    return KnowledgeBaseWithFiles.model_validate(db_kb)
+
+
+@router.get("/knowledge-bases", response_model=List[KnowledgeBaseRead])
+async def list_kbs_endpoint(
+    request: Request,
+    include_public: bool = True,
+    current_user: User = Depends(require_permissions("rag:query")),
+    session: AsyncSession = Depends(get_db),
+):
+    """获取知识库列表"""
+    kbs = await get_knowledge_bases(
+        session=session,
+        user_id=current_user.id,
+        include_public=include_public
+    )
+    return [KnowledgeBaseRead.model_validate(kb) for kb in kbs]
+
+
+@router.put("/knowledge-base/{kb_id}", response_model=KnowledgeBaseRead)
+async def update_kb_endpoint(
+    request: Request,
+    kb_id: int,
+    kb_data: KnowledgeBaseUpdate,
+    current_user: User = Depends(require_permissions("rag:upload")),
+    session: AsyncSession = Depends(get_db),
+):
+    """更新知识库信息"""
+    db_kb = await update_knowledge_base(
+        session=session,
+        kb_id=kb_id,
+        user_id=current_user.id,
+        name=kb_data.name,
+        description=kb_data.description,
+        is_public=kb_data.is_public,
+        kb_metadata=kb_data.kb_metadata
+    )
+
+    if not db_kb:
+        raise AppException.from_error(AppErrorCode.RESOURCE_NOT_FOUND)
+
+    return KnowledgeBaseRead.model_validate(db_kb)
+
+
+@router.delete("/knowledge-base/{kb_id}")
+async def delete_kb_endpoint(
+    request: Request,
+    kb_id: int,
+    current_user: User = Depends(require_permissions("rag:delete")),
+    session: AsyncSession = Depends(get_db),
+):
+    """删除知识库及其所有内容"""
+    success = await delete_knowledge_base(
+        session=session,
+        kb_id=kb_id,
+        user_id=current_user.id
+    )
+
+    if not success:
+        raise AppException.from_error(AppErrorCode.RESOURCE_NOT_FOUND)
+
+    return success_response({"message": "Knowledge base deleted successfully"})
+
+
+@router.post("/reset-embedding-model")
+async def reset_embedding_model_endpoint(
+    request: Request,
+    current_user: User = Depends(require_permissions("rag:delete")),
+):
+    """重置 embedding 模型，释放内存和显存"""
+    reset_embedding_model()
+    return success_response({"message": "Embedding model has been reset successfully"})

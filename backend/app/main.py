@@ -183,9 +183,9 @@ def create_app() -> FastAPI:
     # 初始化 Prometheus 指标
     setup_metrics()
 
-    # 暂时禁用中间件以调试 Swagger 加载问题
-    # app.add_middleware(MetricsMiddleware)
-    # app.add_middleware(AccessLogMiddleware)
+    # 添加中间件
+    app.add_middleware(MetricsMiddleware)
+    app.add_middleware(AccessLogMiddleware)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.CORS_ORIGINS,

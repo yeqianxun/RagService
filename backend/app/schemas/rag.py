@@ -139,3 +139,71 @@ class KBDeleteResponse(BaseModel):
     """
     deleted_files: int
     deleted_chunks: int
+
+
+class KnowledgeBaseCreate(BaseModel):
+    """
+    知识库创建请求模型
+
+    Fields:
+        name: 知识库名称（必填）
+        description: 知识库描述（可选）
+        is_public: 是否公开（默认 False）
+        kb_metadata: 其他元数据，JSON 字符串（可选）
+    """
+    name: str = Field(..., description="知识库名称", min_length=1, max_length=255)
+    description: Optional[str] = Field(None, description="知识库描述")
+    is_public: bool = Field(default=False, description="是否公开")
+    kb_metadata: Optional[str] = Field(None, description="其他元数据，JSON 字符串")
+
+
+class KnowledgeBaseUpdate(BaseModel):
+    """
+    知识库更新请求模型
+
+    Fields:
+        name: 知识库名称（可选）
+        description: 知识库描述（可选）
+        is_public: 是否公开（可选）
+        kb_metadata: 其他元数据，JSON 字符串（可选）
+    """
+    name: Optional[str] = Field(None, description="知识库名称", min_length=1, max_length=255)
+    description: Optional[str] = Field(None, description="知识库描述")
+    is_public: Optional[bool] = Field(None, description="是否公开")
+    kb_metadata: Optional[str] = Field(None, description="其他元数据，JSON 字符串")
+
+
+class KnowledgeBaseRead(ORMModel):
+    """
+    知识库读取模型
+
+    用于返回知识库的完整信息。
+
+    Fields:
+        id: 知识库主键 ID
+        name: 知识库名称
+        description: 知识库描述
+        user_id: 创建者用户 ID
+        is_public: 是否公开
+        kb_metadata: 其他元数据
+        created_at: 创建时间
+        updated_at: 更新时间
+    """
+    id: int
+    name: str
+    description: Optional[str] = None
+    user_id: Optional[int] = None
+    is_public: bool
+    kb_metadata: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class KnowledgeBaseWithFiles(KnowledgeBaseRead):
+    """
+    知识库详细读取模型，包含关联的文件列表
+
+    Fields:
+        files: 关联的文件列表
+    """
+    files: Optional[List[FileRead]] = None

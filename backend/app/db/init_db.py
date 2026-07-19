@@ -10,12 +10,13 @@ from app.models.base import Base
 from app.models.permission import Permission
 from app.models.role import Role
 from app.models.user import User
+from app.models.rag import KnowledgeBase
 
 
 async def initialize_with_retry(max_retries=5, retry_delay=2):
     """
     带重试的数据库初始化
-    
+
     Args:
         max_retries: 最大重试次数
         retry_delay: 重试延迟（秒）
@@ -37,13 +38,13 @@ async def initialize_with_retry(max_retries=5, retry_delay=2):
 async def initialize_database() -> None:
     """初始化数据库 - 启用 pgvector 扩展，创建所有表，然后插入默认数据"""
     app_logger.info("开始初始化数据库...")
-    
+
     # 创建数据库表结构
     async with engine.begin() as connection:
         await connection.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
         await connection.run_sync(Base.metadata.create_all)
         app_logger.info("数据库表结构创建完成")
-    
+
     # 初始化默认数据
     async with AsyncSessionLocal() as session:
         await seed_default_data(session)
@@ -190,5 +191,20 @@ async def seed_default_data(session: AsyncSession) -> None:
             is_superuser=True,
         )
         session.add(admin_user)
+        await session.flush()  # 刷新以获取用户 ID
+
+    # 4. 创建默认知识库（如果不存在）
+    kb_stmt = select(KnowledgeBase).where(KnowledgeBase.id == settings.DEFAULT_KB_ID)
+    default_kb = (await session.execute(kb_stmt)).scalar_one_or_none()
+
+    if default_kb is None:
+        default_kb = KnowledgeBase(
+            id=settings.DEFAULT_KB_ID,
+            name="Default Knowledge Base",
+            description="Default system knowledge base",
+            user_id=admin_user.id,
+            is_public=False,
+        )
+        session.add(default_kb)
 
     await session.commit()
