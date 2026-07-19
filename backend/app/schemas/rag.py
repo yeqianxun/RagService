@@ -77,10 +77,16 @@ class RAGQueryRequest(BaseModel):
         query: 用户的查询问题内容（必填，最小长度 1）
         top_k: 返回的最相关结果数量（默认 5，范围 1-20）
         kb_id: 知识库 ID，可选，用于限制查询范围
+        search_type: 检索类型（vector/bm25/hybrid），默认 hybrid
+        bm25_weight: BM25 权重（仅 hybrid 模式），默认 0.5
+        vector_weight: 向量权重（仅 hybrid 模式），默认 0.5
     """
     query: str = Field(..., description="查询内容", min_length=1)
     top_k: int = Field(default=5, description="返回的top k结果", ge=1, le=20)
     kb_id: Optional[int] = Field(default=None, description="知识库ID，可选，用于限制查询范围")
+    search_type: str = Field(default="hybrid", description="检索类型: vector/bm25/hybrid")
+    bm25_weight: float = Field(default=0.5, description="BM25 权重（仅 hybrid 模式）", ge=0, le=1)
+    vector_weight: float = Field(default=0.5, description="向量权重（仅 hybrid 模式）", ge=0, le=1)
 
 
 class RAGQueryResult(BaseModel):
@@ -94,11 +100,17 @@ class RAGQueryResult(BaseModel):
         score: 相似度得分（越高越相关）
         file_name: 来源文件名
         chunk_index: 切片在原文件中的索引位置
+        search_type: 检索类型
+        bm25_score: BM25 分数（仅 hybrid 模式）
+        vector_score: 向量分数（仅 hybrid 模式）
     """
     content: str
     score: float
     file_name: Optional[str] = None
     chunk_index: Optional[int] = None
+    search_type: Optional[str] = None
+    bm25_score: Optional[float] = None
+    vector_score: Optional[float] = None
 
 
 class RAGQueryResponse(BaseModel):

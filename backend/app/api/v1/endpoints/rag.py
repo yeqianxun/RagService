@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, UploadFile, File as FastAPIFile, Request
 from pathlib import Path
 from sqlalchemy.ext.asyncio import AsyncSession
 from uuid import uuid4
-from typing import List
+from typing import List, Optional
 
 from app.api.deps import get_current_active_user, get_db, require_permissions
 from app.core.config import settings
@@ -23,7 +23,7 @@ from app.schemas.rag import (
     RAGQueryResult,
     KBDeleteResponse
 )
-from app.services.rag_service import process_file, vector_search, delete_file, delete_kb_all
+from app.services.rag_service import process_file, vector_search, bm25_search, hybrid_search, delete_file, delete_kb_all
 
 
 # 创建 RAG 路由组
@@ -100,20 +100,43 @@ async def query_rag(
     session: AsyncSession = Depends(get_db),
 ):
     """
-    使用 pgvector 进行向量检索查询 RAG 知识库
-    检索流程：
-    1. 生成查询向量
-    2. 在 PostgreSQL 中使用 pgvector 进行相似度搜索
-    3. 返回相关文档切片
+    查询 RAG 知识库，支持多种检索方式
+    检索类型：
+    - vector: 仅使用向量检索
+    - bm25: 仅使用 BM25 关键词检索
+    - hybrid: 混合检索（默认），结合 BM25 和向量检索
     """
-    # 调用服务层执行向量检索
-    results = await vector_search(
-        query=query_request.query,
-        session=session,
-        top_k=query_request.top_k,
-        user_id=current_user.id,
-        kb_id=query_request.kb_id
-    )
+    search_type = query_request.search_type.lower()
+
+    if search_type == "vector":
+        results = await vector_search(
+            query=query_request.query,
+            session=session,
+            top_k=query_request.top_k,
+            user_id=current_user.id,
+            kb_id=query_request.kb_id
+        )
+        # 为 vector 结果添加 search_type
+        for r in results:
+            r["search_type"] = "vector"
+    elif search_type == "bm25":
+        results = await bm25_search(
+            query=query_request.query,
+            session=session,
+            top_k=query_request.top_k,
+            user_id=current_user.id,
+            kb_id=query_request.kb_id
+        )
+    else:  # hybrid
+        results = await hybrid_search(
+            query=query_request.query,
+            session=session,
+            top_k=query_request.top_k,
+            user_id=current_user.id,
+            kb_id=query_request.kb_id,
+            bm25_weight=query_request.bm25_weight,
+            vector_weight=query_request.vector_weight
+        )
 
     # 组装并返回响应
     return RAGQueryResponse(
