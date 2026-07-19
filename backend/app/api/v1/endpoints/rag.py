@@ -34,7 +34,7 @@ router = APIRouter(tags=["RAG"])
 async def upload_and_process_file(
     request: Request,
     file: UploadFile = FastAPIFile(...),
-    kb_id: int = 1,  # 新增：可选知识库ID，默认为1
+    kb_id: Optional[int] = None,  # 可选知识库ID，默认为配置文件中的 DEFAULT_KB_ID
     current_user: User = Depends(require_permissions("rag:upload")),
     session: AsyncSession = Depends(get_db),
 ):

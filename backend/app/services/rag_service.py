@@ -11,19 +11,29 @@
 import os
 import re
 import math
+import hashlib
 from collections import defaultdict
 from typing import Optional, List, Dict, Any, Tuple
 from pathlib import Path
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from langchain_community.document_loaders import TextLoader, PyPDFLoader, Docx2txtLoader
-from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_huggingface import HuggingFaceEmbeddings
 
 from app.core.config import settings
 from app.core.exceptions import AppException, AppErrorCode
 from app.models.rag import File, DocumentChunk
 from app.utils.rag_utils import clean_rag_text
+
+
+def calculate_md5(file_path: str) -> str:
+    """计算文件的MD5哈希值"""
+    hash_md5 = hashlib.md5()
+    with open(file_path, "rb") as f:
+        for chunk in iter(lambda: f.read(4096), b""):
+            hash_md5.update(chunk)
+    return hash_md5.hexdigest()
 
 logger = __import__('app.core.logging_config').core.logging_config.app_logger
 
@@ -224,10 +234,12 @@ async def process_file(
     file_path: str,
     file_name: str,
     user_id: Optional[int] = None,
-    kb_id: int = 1
+    kb_id: Optional[int] = None
 ) -> List[DocumentChunk]:
+    if kb_id is None:
+        kb_id = settings.DEFAULT_KB_ID
     """
-    简化版 RAG 文件处理流程
+     RAG 文件处理流程
     """
     logger.info(f"开始处理文件: {file_name}")
 
@@ -242,7 +254,25 @@ async def process_file(
         if file_size > max_file_size_bytes:
             raise AppException.from_error(AppErrorCode.FILE_TOO_LARGE)
 
-        # 2. 加载并清洗文档
+        # 2. 计算文件MD5并检查重复
+        md5_hash = calculate_md5(file_path)
+
+        # 检查是否已存在相同MD5的文件
+        existing_file_query = select(File).where(File.md5_hash == md5_hash)
+        if kb_id is not None:
+            existing_file_query = existing_file_query.where(File.kb_id == kb_id)
+
+        result = await session.execute(existing_file_query)
+        existing_file = result.scalar_one_or_none()
+
+        if existing_file:
+            logger.warning(f"文件已存在: {file_name} (MD5: {md5_hash}), 跳过重复上传")
+            # 如果文件已存在，返回该文件的所有文档切片
+            existing_chunks_query = select(DocumentChunk).where(DocumentChunk.file_id == existing_file.id)
+            chunks_result = await session.execute(existing_chunks_query)
+            return chunks_result.scalars().all()
+
+        # 3. 加载并清洗文档
         docs = load_documents(file_path)
         clean_docs = []
         for doc in docs:
@@ -260,23 +290,24 @@ async def process_file(
 
         logger.info(f"文档加载完成，共 {len(clean_docs)} 页")
 
-        # 3. 保存 File 到数据库
+        # 4. 保存 File 到数据库
         db_file = File(
             kb_id=kb_id,
             user_id=user_id,
             filename=file_name,
             file_path=file_path,
             file_size=file_size,
-            file_type=file_path_obj.suffix.lower()
+            file_type=file_path_obj.suffix.lower(),
+            md5_hash=md5_hash
         )
         session.add(db_file)
         await session.commit()
         await session.refresh(db_file)
         saved_file_id = db_file.id
 
-        logger.info(f"文件元数据已保存，ID: {saved_file_id}")
+        logger.info(f"文件元数据已保存，ID: {saved_file_id}, MD5: {md5_hash}")
 
-        # 4. 文档切分
+        # 5. 文档切分
         splitter = RecursiveCharacterTextSplitter(
             chunk_size=settings.CHUNK_SIZE,
             chunk_overlap=settings.CHUNK_OVERLAP
@@ -284,12 +315,12 @@ async def process_file(
         splits = splitter.split_documents(clean_docs)
         logger.info(f"文档切分完成，共 {len(splits)} 个切片")
 
-        # 5. 向量化
+        # 6. 向量化
         model = get_embedding_model()
         texts = [split.page_content for split in splits]
         embeddings = model.embed_documents(texts)
 
-        # 6. 保存 DocumentChunk 到数据库
+        # 7. 保存 DocumentChunk 到数据库
         db_chunks = []
         for idx, (split, embedding) in enumerate(zip(splits, embeddings)):
             db_chunk = DocumentChunk(
@@ -317,6 +348,7 @@ async def process_file(
         if isinstance(e, AppException):
             raise
         raise AppException.from_error(AppErrorCode.FILE_PROCESS_ERROR)
+
 
 
 async def delete_file(

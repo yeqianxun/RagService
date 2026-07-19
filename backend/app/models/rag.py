@@ -23,6 +23,7 @@ class File(Base, TimestampMixin):
     file_path: Mapped[str] = mapped_column(String(500), nullable=False)
     file_size: Mapped[int] = mapped_column(Integer, nullable=False)
     file_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    md5_hash: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)  # 文件MD5哈希值，用于检测重复
 
     document_chunks = relationship("DocumentChunk", back_populates="file", cascade="all, delete-orphan")
 

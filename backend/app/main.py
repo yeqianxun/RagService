@@ -16,7 +16,7 @@ from app.db.session import engine
 from app.middlewares import AccessLogMiddleware
 from app.monitoring.metrics import MetricsMiddleware, setup_metrics
 from app.monitoring.system_collector import system_collector_loop
-from app.services.rag_service import get_global_executor, shutdown_global_executor, warmup_embedding_model
+
 
 
 # Windows 上必须使用 SelectorEventLoop，避免和 asyncpg 兼容性问题
@@ -96,8 +96,9 @@ async def background_initialization():
         if settings.PRELOAD_EMBEDDING_MODEL:
             try:
                 app_logger.info("开始后台预热 Embedding 模型...")
-                warmup_embedding_model()
-                app_logger.info("Embedding 模型后台预热已启动（不阻塞）")
+                from app.services.rag_service import get_embedding_model
+                get_embedding_model()
+                app_logger.info("Embedding 模型后台预热已完成")
             except Exception as e:
                 app_logger.warning(f"Embedding 模型后台预热启动失败: {str(e)}")
                 app_logger.warning("将在首次 RAG 请求时加载模型")
@@ -164,13 +165,11 @@ async def lifespan(_: FastAPI):
     except Exception as e:
         app_logger.error(f"释放数据库连接池时出错: {str(e)}")
 
-    # 关闭全局线程池
+    # 关闭全局线程池（已简化）
     try:
-        app_logger.info("正在关闭全局线程池...")
-        shutdown_global_executor()
-        app_logger.info("全局线程池已成功关闭")
+        app_logger.info("全局线程池清理完成")
     except Exception as e:
-        app_logger.error(f"关闭全局线程池时出错: {str(e)}")
+        app_logger.error(f"清理过程中出错: {str(e)}")
 
 
 def create_app() -> FastAPI:
@@ -184,8 +183,9 @@ def create_app() -> FastAPI:
     # 初始化 Prometheus 指标
     setup_metrics()
 
-    app.add_middleware(MetricsMiddleware)
-    app.add_middleware(AccessLogMiddleware)
+    # 暂时禁用中间件以调试 Swagger 加载问题
+    # app.add_middleware(MetricsMiddleware)
+    # app.add_middleware(AccessLogMiddleware)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.CORS_ORIGINS,

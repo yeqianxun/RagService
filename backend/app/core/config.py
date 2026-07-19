@@ -56,6 +56,9 @@ class Settings(BaseSettings):
     RAG_CLEAN_REMOVE_LINKS: bool = True
     RAG_MIN_SEGMENT_LEN: int = 8
 
+    # 默认知识库 ID
+    DEFAULT_KB_ID: int = 1
+
     # 批次处理配置
     BATCH_ENCODE_SIZE: int = 32  # 推理批次大小
     BATCH_STORE_SIZE: int = 100  # 数据库批次大小
