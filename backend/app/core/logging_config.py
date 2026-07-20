@@ -5,14 +5,113 @@
 - 应用日志 (app)
 - 访问日志 (access)
 - SQLAlchemy 引擎日志
-- 所有日志同时输出到控制台和文件（按大小轮转）
+- 按时间滚动切割 + 压缩归档 + 数量限制
 """
 import logging
 import sys
-from logging.handlers import RotatingFileHandler
+import gzip
+import shutil
+from logging.handlers import TimedRotatingFileHandler
 from pathlib import Path
 
 from app.core.config import settings
+
+
+def _compress_log(source: Path, target: Path) -> None:
+    """压缩日志文件为 gzip 格式"""
+    if source.exists():
+        with open(source, 'rb') as f_in:
+            with gzip.open(target, 'wb') as f_out:
+                shutil.copyfileobj(f_in, f_out)
+        # 压缩完成后删除原文件
+        source.unlink()
+
+
+class ArchivedTimedRotatingFileHandler(TimedRotatingFileHandler):
+    """增强版的时间滚动日志 handler，支持自动压缩归档和数量限制"""
+
+    def __init__(
+        self,
+        filename: str,
+        when: str = 'midnight',
+        interval: int = 1,
+        backupCount: int = 30,
+        encoding: str = 'utf-8',
+        compress: bool = True,
+    ):
+        super().__init__(
+            filename=filename,
+            when=when,
+            interval=interval,
+            backupCount=backupCount,
+            encoding=encoding,
+        )
+        self.compress = compress
+
+    def _get_all_log_files(self) -> list[Path]:
+        """获取所有相关的日志文件（包括压缩和未压缩的）"""
+        log_dir = Path(self.baseFilename).parent
+        base_name = Path(self.baseFilename).name
+
+        log_files = []
+
+        # 查找所有匹配的日志文件
+        for log_file in log_dir.glob(f"{base_name}*"):
+            # 跳过当前正在写的文件
+            if log_file == Path(self.baseFilename):
+                continue
+            log_files.append(log_file)
+
+        return log_files
+
+    def _cleanup_old_logs(self) -> None:
+        """清理超过数量限制的旧日志文件"""
+        if self.backupCount <= 0:
+            return
+
+        log_files = self._get_all_log_files()
+
+        if len(log_files) <= self.backupCount:
+            return
+
+        # 按最后修改时间排序，最新的排在前面
+        log_files.sort(key=lambda f: f.stat().st_mtime, reverse=True)
+
+        # 计算需要删除的文件数量
+        files_to_delete = log_files[self.backupCount:]
+
+        # 删除多余的文件
+        for log_file in files_to_delete:
+            try:
+                log_file.unlink()
+            except Exception:
+                pass  # 忽略删除时的错误
+
+    def doRollover(self) -> None:
+        """执行滚动，并重写以支持压缩和数量限制"""
+        # 先执行父类的滚动逻辑
+        super().doRollover()
+
+        if self.compress:
+            # 查找刚刚滚动出来的文件并压缩
+            log_dir = Path(self.baseFilename).parent
+            base_name = Path(self.baseFilename).name
+
+            # 查找所有可能的滚动日志文件
+            for log_file in log_dir.glob(f"{base_name}.*"):
+                # 跳过当前正在写的文件和已压缩的文件
+                if log_file.suffix == '.gz':
+                    continue
+                if log_file == Path(self.baseFilename):
+                    continue
+
+                # 检查文件是否已经压缩过
+                gz_file = log_file.with_suffix(log_file.suffix + '.gz')
+                if not gz_file.exists():
+                    _compress_log(log_file, gz_file)
+
+        # 清理超过数量限制的旧日志
+        self._cleanup_old_logs()
 
 
 def _ensure_log_dir() -> Path:
@@ -26,14 +125,15 @@ def _build_file_handler(
     filename: str,
     level: int,
     formatter: logging.Formatter,
-) -> RotatingFileHandler:
-    """创建按大小轮转的文件 handler"""
+) -> ArchivedTimedRotatingFileHandler:
+    """创建按时间滚动并支持压缩归档的文件 handler"""
     log_dir = _ensure_log_dir()
-    handler = RotatingFileHandler(
+    handler = ArchivedTimedRotatingFileHandler(
         log_dir / filename,
-        maxBytes=10 * 1024 * 1024,  # 10MB
-        backupCount=5,
+        when=settings.LOG_ROTATION_WHEN,
+        backupCount=settings.LOG_BACKUP_COUNT,
         encoding="utf-8",
+        compress=settings.LOG_COMPRESS_ARCHIVES,
     )
     handler.setLevel(level)
     handler.setFormatter(formatter)
@@ -57,7 +157,7 @@ def setup_app_logger() -> logging.Logger:
         console_handler.setFormatter(formatter)
         logger.addHandler(console_handler)
 
-        # 文件 handler（按大小轮转）
+        # 文件 handler（按时间滚动，自动压缩）
         logger.addHandler(_build_file_handler("app.log", logging.DEBUG, formatter))
 
     return logger
@@ -69,7 +169,7 @@ def setup_access_logger() -> logging.Logger:
     logger.setLevel(logging.INFO)
 
     formatter = logging.Formatter(
-        "%(asctime)s | ACCESS | %(message)s",
+        "%(asctime)s | | | %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
     )
 
@@ -80,7 +180,7 @@ def setup_access_logger() -> logging.Logger:
         console_handler.setFormatter(formatter)
         logger.addHandler(console_handler)
 
-        # 文件 handler（按大小轮转）
+        # 文件 handler（按时间滚动，自动压缩）
         logger.addHandler(_build_file_handler("access.log", logging.INFO, formatter))
 
     return logger

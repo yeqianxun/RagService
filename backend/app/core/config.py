@@ -34,6 +34,11 @@ class Settings(BaseSettings):
     MAX_FILE_SIZE_MB: int = 100
     KEEP_UPLOADED_FILES: bool = False
     PRELOAD_EMBEDDING_MODEL: bool = True
+    
+    # 日志配置
+    LOG_ROTATION_WHEN: str = "midnight"  # 日志滚动时间：midnight, H, D, etc.
+    LOG_BACKUP_COUNT: int = 30  # 日志保留份数
+    LOG_COMPRESS_ARCHIVES: bool = True  # 是否压缩归档日志
 
     DEFAULT_ADMIN_EMAIL: str = "admin@example.com"
     DEFAULT_ADMIN_PASSWORD: str = "Admin@123456"
