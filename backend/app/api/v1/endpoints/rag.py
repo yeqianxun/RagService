@@ -29,7 +29,7 @@ from app.schemas.rag import (
     KnowledgeBaseWithFiles
 )
 from app.services.rag_service import (
-    process_file, vector_search, bm25_search, hybrid_search, delete_file, delete_kb_all,
+    process_file, vector_search, delete_file, delete_kb_all,
     create_knowledge_base, get_knowledge_base, get_knowledge_bases, update_knowledge_base, delete_knowledge_base,
     reset_embedding_model
 )
@@ -109,43 +109,19 @@ async def query_rag(
     session: AsyncSession = Depends(get_db),
 ):
     """
-    查询 RAG 知识库，支持多种检索方式
-    检索类型：
-    - vector: 仅使用向量检索
-    - bm25: 仅使用 BM25 关键词检索
-    - hybrid: 混合检索（默认），结合 BM25 和向量检索
+    查询 RAG 知识库（仅向量检索）
+    使用语义相似度搜索相关文档切片
     """
-    search_type = query_request.search_type.lower()
-
-    if search_type == "vector":
-        results = await vector_search(
-            query=query_request.query,
-            session=session,
-            top_k=query_request.top_k,
-            user_id=current_user.id,
-            kb_id=query_request.kb_id
-        )
-        # 为 vector 结果添加 search_type
-        for r in results:
-            r["search_type"] = "vector"
-    elif search_type == "bm25":
-        results = await bm25_search(
-            query=query_request.query,
-            session=session,
-            top_k=query_request.top_k,
-            user_id=current_user.id,
-            kb_id=query_request.kb_id
-        )
-    else:  # hybrid
-        results = await hybrid_search(
-            query=query_request.query,
-            session=session,
-            top_k=query_request.top_k,
-            user_id=current_user.id,
-            kb_id=query_request.kb_id,
-            bm25_weight=query_request.bm25_weight,
-            vector_weight=query_request.vector_weight
-        )
+    results = await vector_search(
+        query=query_request.query,
+        session=session,
+        top_k=query_request.top_k,
+        user_id=current_user.id,
+        kb_id=query_request.kb_id
+    )
+    # 为结果添加 search_type
+    for r in results:
+        r["search_type"] = "vector"
 
     # 组装并返回响应
     return RAGQueryResponse(

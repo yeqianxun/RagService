@@ -4,17 +4,12 @@
 1. 文件处理：加载、清洗、切分文档
 2. 向量存储：使用 PostgreSQL + pgvector
 3. 向量检索：直接在 PostgreSQL 中进行相似度搜索
-4. BM25 检索：关键词检索
-5. 混合检索：结合 BM25 和向量检索
 """
 
 import os
-import re
-import math
 import hashlib
 import threading
-from collections import defaultdict
-from typing import Optional, List, Dict, Any, Tuple
+from typing import Optional, List, Dict, Any
 from pathlib import Path
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -27,6 +22,11 @@ from app.core.exceptions import AppException, AppErrorCode
 from app.models.rag import File, DocumentChunk, KnowledgeBase
 from app.utils.rag_utils import clean_rag_text
 
+logger = __import__('app.core.logging_config').core.logging_config.app_logger
+
+# 全局 embedding 模型实例
+_embedding_model: HuggingFaceEmbeddings | None = None
+
 
 def calculate_md5(file_path: str) -> str:
     """计算文件的MD5哈希值"""
@@ -35,156 +35,6 @@ def calculate_md5(file_path: str) -> str:
         for chunk in iter(lambda: f.read(4096), b""):
             hash_md5.update(chunk)
     return hash_md5.hexdigest()
-
-logger = __import__('app.core.logging_config').core.logging_config.app_logger
-
-
-# 全局 embedding 模型实例
-_embedding_model: HuggingFaceEmbeddings | None = None
-
-# BM25 相关全局变量
-_bm25_index = None
-_chunk_texts = {}  # chunk_id -> text
-
-
-class BM25:
-    """
-    BM25 检索算法实现
-    """
-    def __init__(self, k1=1.5, b=0.75):
-        self.k1 = k1
-        self.b = b
-        self.corpus = []
-        self.doc_lengths = []
-        self.avg_doc_length = 0
-        self.doc_freqs = defaultdict(int)
-        self.idf = {}
-        self.doc_term_freqs = []  # 每个文档的词频
-
-    def fit(self, texts: List[str]):
-        """
-        构建 BM25 索引
-        """
-        self.corpus = texts
-        self.doc_lengths = [len(self.tokenize(text)) for text in texts]
-        self.avg_doc_length = sum(self.doc_lengths) / len(self.doc_lengths) if self.doc_lengths else 0
-
-        # 统计词频
-        for text in texts:
-            tokens = self.tokenize(text)
-            term_freq = defaultdict(int)
-            for token in tokens:
-                term_freq[token] += 1
-            self.doc_term_freqs.append(term_freq)
-
-            # 更新文档频率
-            for token in set(tokens):
-                self.doc_freqs[token] += 1
-
-        # 计算 IDF
-        num_docs = len(texts)
-        for token, freq in self.doc_freqs.items():
-            self.idf[token] = math.log(1 + (num_docs - freq + 0.5) / (freq + 0.5))
-
-    def tokenize(self, text: str) -> List[str]:
-        """
-        简单的分词（支持中文和英文）
-        """
-        # 移除标点符号，转为小写
-        text = re.sub(r'[^\w\s]', ' ', text.lower())
-        # 按空格分割
-        tokens = text.split()
-        # 简单处理中文（按字符）
-        result = []
-        for token in tokens:
-            if any('\u4e00' <= char <= '\u9fff' for char in token):
-                # 中文按字符分割
-                result.extend(list(token))
-            else:
-                result.append(token)
-        return result
-
-    def get_scores(self, query: str) -> List[float]:
-        """
-        计算查询与所有文档的 BM25 分数
-        """
-        query_tokens = self.tokenize(query)
-        scores = [0.0] * len(self.corpus)
-
-        for idx in range(len(self.corpus)):
-            doc_len = self.doc_lengths[idx]
-            term_freq = self.doc_term_freqs[idx]
-
-            score = 0.0
-            for token in query_tokens:
-                if token not in self.idf:
-                    continue
-
-                idf = self.idf[token]
-                tf = term_freq.get(token, 0)
-                numerator = tf * (self.k1 + 1)
-                denominator = tf + self.k1 * (1 - self.b + self.b * doc_len / self.avg_doc_length)
-                score += idf * numerator / denominator
-
-            scores[idx] = score
-
-        return scores
-
-    def get_top_n(self, query: str, n: int = 10) -> List[Tuple[int, float]]:
-        """
-        获取 BM25 分数最高的 n 个文档
-        """
-        scores = self.get_scores(query)
-        # 返回 (索引, 分数) 的列表，按分数降序排序
-        top_indices = sorted(range(len(scores)), key=lambda i: scores[i], reverse=True)[:n]
-        return [(idx, scores[idx]) for idx in top_indices if scores[idx] > 0]
-
-
-def get_bm25_index() -> BM25:
-    """
-    获取或初始化 BM25 索引
-    """
-    global _bm25_index, _chunk_texts
-    if _bm25_index is None:
-        _bm25_index = BM25()
-        _chunk_texts = {}
-    return _bm25_index
-
-
-async def rebuild_bm25_index(session: AsyncSession, kb_id: Optional[int] = None):
-    """
-    从数据库重建 BM25 索引
-    """
-    global _bm25_index, _chunk_texts
-
-    logger.info("正在重建 BM25 索引...")
-
-    stmt = select(DocumentChunk)
-    if kb_id is not None:
-        stmt = stmt.where(DocumentChunk.kb_id == kb_id)
-
-    result = await session.execute(stmt)
-    chunks = result.scalars().all()
-
-    # 准备数据
-    texts = []
-    chunk_ids = []
-    for chunk in chunks:
-        texts.append(chunk.content)
-        chunk_ids.append(chunk.id)
-        _chunk_texts[chunk.id] = chunk.content
-
-    # 构建索引
-    _bm25_index = BM25()
-    _bm25_index.fit(texts)
-
-    # 存储 chunk_id 与索引的映射
-    _bm25_chunk_id_map = {idx: chunk_id for idx, chunk_id in enumerate(chunk_ids)}
-    _bm25_index._chunk_id_map = _bm25_chunk_id_map  # 附加到索引对象上
-
-    logger.info(f"BM25 索引重建完成，共索引 {len(chunks)} 个文档切片")
-    return _bm25_index
-
 
 
 class EmbeddingModelSingleton:
@@ -254,6 +104,7 @@ def reset_embedding_model():
     """重置 embedding 模型，释放内存和显存"""
     EmbeddingModelSingleton.reset()
 
+
 def get_loader(file_path: str):
     """根据文件类型获取文档加载器"""
     ext = Path(file_path).suffix.lower()
@@ -311,7 +162,7 @@ async def process_file(
         existing_file = result.scalar_one_or_none()
 
         if existing_file:
-            logger.warning(f"文件已存在: {file_name} (MD5: {md5_hash}), 跳过重复上传")
+            logger.warning(f"文件已存在: {file_name} (MD5: {md5_hash})，跳过重复上传")
             # 如果文件已存在，返回该文件的所有文档切片
             existing_chunks_query = select(DocumentChunk).where(DocumentChunk.file_id == existing_file.id)
             chunks_result = await session.execute(existing_chunks_query)
@@ -343,7 +194,9 @@ async def process_file(
             file_path=file_path,
             file_size=file_size,
             file_type=file_path_obj.suffix.lower(),
-            md5_hash=md5_hash
+            md5_hash=md5_hash,
+            chunk_size=settings.CHUNK_SIZE,
+            chunk_overlap=settings.CHUNK_OVERLAP
         )
         session.add(db_file)
         await session.commit()
@@ -382,9 +235,6 @@ async def process_file(
         await session.commit()
         logger.info(f"文件处理完成，共保存 {len(db_chunks)} 个文档切片")
 
-        # 重建 BM25 索引
-        await rebuild_bm25_index(session, kb_id=kb_id)
-
         return db_chunks
 
     except Exception as e:
@@ -393,7 +243,6 @@ async def process_file(
         if isinstance(e, AppException):
             raise
         raise AppException.from_error(AppErrorCode.FILE_PROCESS_ERROR)
-
 
 
 async def delete_file(
@@ -456,7 +305,7 @@ async def delete_kb_all(
     try:
         from sqlalchemy import delete
 
-        # 查询文件列表
+        # 查询文件列表（使用复合索引加速）
         stmt = select(File).where(File.kb_id == kb_id)
         if user_id is not None:
             stmt = stmt.where(File.user_id == user_id)
@@ -466,7 +315,7 @@ async def delete_kb_all(
 
         if not files_to_delete:
             logger.warning(f"知识库 {kb_id} 没有可删除的文件")
-            return {"deleted_files": 0, "deleted_chunks": 0}
+            return {"deleted_files": 0, "deleted_chunks": -1}
 
         # 删除磁盘文件
         for file in files_to_delete:
@@ -474,14 +323,7 @@ async def delete_kb_all(
             if file_path.exists():
                 file_path.unlink()
 
-        # 批量删除数据库记录
-        delete_chunks_stmt = delete(DocumentChunk).where(DocumentChunk.kb_id == kb_id)
-        if user_id is not None:
-            delete_chunks_stmt = delete_chunks_stmt.where(DocumentChunk.user_id == user_id)
-
-        chunk_result = await session.execute(delete_chunks_stmt)
-        deleted_chunks = chunk_result.rowcount
-
+        # 批量删除数据库记录 - 直接删除 File 记录，DocumentChunk 会级联删除
         delete_files_stmt = delete(File).where(File.kb_id == kb_id)
         if user_id is not None:
             delete_files_stmt = delete_files_stmt.where(File.user_id == user_id)
@@ -489,12 +331,13 @@ async def delete_kb_all(
         file_result = await session.execute(delete_files_stmt)
         deleted_files = file_result.rowcount
 
+        # 因为是级联删除，我们无法直接获得 deleted_chunks 数量
         await session.commit()
 
-        logger.info(f"知识库批量删除完成: 删除文件数={deleted_files}, 删除切片数={deleted_chunks}")
+        logger.info(f"知识库批量删除完成: 删除文件数={deleted_files}")
         return {
             "deleted_files": deleted_files,
-            "deleted_chunks": deleted_chunks
+            "deleted_chunks": -1  # 表示级联删除
         }
 
     except AppException:
@@ -514,7 +357,11 @@ async def vector_search(
     kb_id: Optional[int] = None
 ) -> List[Dict[str, Any]]:
     """
-    向量检索
+    向量检索 - 优化版
+    1. 先通过 DocumentChunk 表过滤（使用复合索引）再计算向量距离
+    2. 只查询需要的字段
+    3. 相似度阈值下推到 SQL
+    4. 利用 pgvector 索引
     """
     if not query or not query.strip():
         return []
@@ -525,22 +372,45 @@ async def vector_search(
     model = get_embedding_model()
     query_embedding = model.embed_query(query.strip())
 
-    # 2. 构建查询
+    # 计算距离阈值（cosine_similarity = 1 - cosine_distance）
+    min_similarity = settings.MIN_SIMILARITY_SCORE
+    max_distance = 1 - min_similarity
+
+    # 2. 构建优化后的查询
+    # - 先在 DocumentChunk 表应用过滤条件（使用复合索引）
+    # - 只选择需要的字段，避免全表字段传输
+    # - 相似度阈值下推到 SQL 层
     stmt = (
         select(
-            DocumentChunk,
-            File,
+            DocumentChunk.id.label("chunk_id"),
+            DocumentChunk.content,
+            DocumentChunk.chunk_index,
+            File.filename.label("file_name"),
             (1 - DocumentChunk.embedding.cosine_distance(query_embedding)).label('similarity')
         )
         .join(File, DocumentChunk.file_id == File.id)
-        .order_by(DocumentChunk.embedding.cosine_distance(query_embedding))
-        .limit(top_k)
     )
 
+    # 先应用过滤条件（通过 DocumentChunk 表，利用复合索引）
     if kb_id is not None:
         stmt = stmt.where(DocumentChunk.kb_id == kb_id)
     if user_id is not None:
         stmt = stmt.where(DocumentChunk.user_id == user_id)
+
+    # 过滤掉已删除的记录
+    stmt = stmt.where(DocumentChunk.is_deleted == False)
+
+    # 相似度阈值下推，在数据库层过滤低分结果
+    stmt = stmt.where(
+        DocumentChunk.embedding.cosine_distance(query_embedding) <= max_distance
+    )
+
+    # 最后排序和限制
+    stmt = (
+        stmt
+        .order_by(DocumentChunk.embedding.cosine_distance(query_embedding))
+        .limit(top_k)
+    )
 
     result = await session.execute(stmt)
     records = result.all()
@@ -549,177 +419,19 @@ async def vector_search(
         logger.info("向量检索完成: 结果数=0")
         return []
 
-    # 3. 处理结果
+    # 3. 处理结果 - 直接使用查询到的字段
     final_results = []
-    for chunk, file, similarity in records:
-        similarity_float = float(similarity) if similarity is not None else 0.0
-        if similarity_float >= settings.MIN_SIMILARITY_SCORE:
-            final_results.append({
-                "content": chunk.content,
-                "score": similarity_float,
-                "file_name": file.filename,
-                "chunk_index": chunk.chunk_index
-            })
+    for record in records:
+        similarity_float = float(record.similarity) if record.similarity is not None else 0.0
+        final_results.append({
+            "content": record.content,
+            "score": similarity_float,
+            "file_name": record.file_name,
+            "chunk_index": record.chunk_index,
+            "chunk_id": record.chunk_id
+        })
 
     logger.info(f"向量检索完成: 结果数={len(final_results)}")
-    return final_results
-
-
-async def bm25_search(
-    query: str,
-    session: AsyncSession,
-    top_k: int = 5,
-    user_id: Optional[int] = None,
-    kb_id: Optional[int] = None
-) -> List[Dict[str, Any]]:
-    """
-    BM25 关键词检索
-    """
-    if not query or not query.strip():
-        return []
-
-    logger.info(f"开始 BM25 检索: 查询={query}, top_k={top_k}")
-
-    # 获取 BM25 索引（如果没有则重建）
-    bm25 = get_bm25_index()
-    if not hasattr(bm25, '_chunk_id_map') or not bm25._chunk_id_map:
-        await rebuild_bm25_index(session, kb_id=kb_id)
-        bm25 = get_bm25_index()
-        if not hasattr(bm25, '_chunk_id_map') or not bm25._chunk_id_map:
-            logger.info("BM25 检索完成: 没有索引数据")
-            return []
-
-    # 获取 BM25 分数
-    top_results = bm25.get_top_n(query, n=top_k * 2)  # 获取更多结果以便筛选
-
-    if not top_results:
-        logger.info("BM25 检索完成: 结果数=0")
-        return []
-
-    # 获取 chunk_ids
-    chunk_ids = [bm25._chunk_id_map[idx] for idx, score in top_results if idx in bm25._chunk_id_map]
-
-    if not chunk_ids:
-        logger.info("BM25 检索完成: 结果数=0")
-        return []
-
-    # 从数据库获取详细信息
-    stmt = select(DocumentChunk, File).join(File, DocumentChunk.file_id == File.id).where(
-        DocumentChunk.id.in_(chunk_ids)
-    )
-
-    if kb_id is not None:
-        stmt = stmt.where(DocumentChunk.kb_id == kb_id)
-    if user_id is not None:
-        stmt = stmt.where(DocumentChunk.user_id == user_id)
-
-    result = await session.execute(stmt)
-    records = result.all()
-
-    # 创建分数映射
-    score_map = {bm25._chunk_id_map[idx]: score for idx, score in top_results if idx in bm25._chunk_id_map}
-
-    # 处理结果
-    final_results = []
-    for chunk, file in records:
-        score = score_map.get(chunk.id, 0.0)
-        final_results.append({
-            "content": chunk.content,
-            "score": score,
-            "file_name": file.filename,
-            "chunk_index": chunk.chunk_index,
-            "search_type": "bm25"
-        })
-
-    # 按分数排序并限制 top_k
-    final_results.sort(key=lambda x: x["score"], reverse=True)
-    final_results = final_results[:top_k]
-
-    logger.info(f"BM25 检索完成: 结果数={len(final_results)}")
-    return final_results
-
-
-async def hybrid_search(
-    query: str,
-    session: AsyncSession,
-    top_k: int = 5,
-    user_id: Optional[int] = None,
-    kb_id: Optional[int] = None,
-    bm25_weight: float = 0.5,
-    vector_weight: float = 0.5
-) -> List[Dict[str, Any]]:
-    """
-    混合检索（BM25 + 向量）
-    """
-    if not query or not query.strip():
-        return []
-
-    logger.info(f"开始混合检索: 查询={query}, top_k={top_k}")
-
-    # 并行执行两种检索
-    bm25_results = await bm25_search(query, session, top_k=top_k * 2, user_id=user_id, kb_id=kb_id)
-    vector_results = await vector_search(query, session, top_k=top_k * 2, user_id=user_id, kb_id=kb_id)
-
-    # 标准化分数并合并
-    result_map = {}
-
-    # 处理 BM25 结果
-    if bm25_results:
-        max_bm25_score = max(r["score"] for r in bm25_results)
-        min_bm25_score = min(r["score"] for r in bm25_results)
-        for r in bm25_results:
-            key = (r["file_name"], r["chunk_index"])
-            normalized_score = 0.0
-            if max_bm25_score > min_bm25_score:
-                normalized_score = (r["score"] - min_bm25_score) / (max_bm25_score - min_bm25_score)
-            result_map[key] = {
-                "content": r["content"],
-                "file_name": r["file_name"],
-                "chunk_index": r["chunk_index"],
-                "bm25_score": normalized_score,
-                "vector_score": 0.0
-            }
-
-    # 处理向量结果
-    if vector_results:
-        max_vector_score = max(r["score"] for r in vector_results)
-        min_vector_score = min(r["score"] for r in vector_results)
-        for r in vector_results:
-            key = (r["file_name"], r["chunk_index"])
-            normalized_score = 0.0
-            if max_vector_score > min_vector_score:
-                normalized_score = (r["score"] - min_vector_score) / (max_vector_score - min_vector_score)
-
-            if key in result_map:
-                result_map[key]["vector_score"] = normalized_score
-            else:
-                result_map[key] = {
-                    "content": r["content"],
-                    "file_name": r["file_name"],
-                    "chunk_index": r["chunk_index"],
-                    "bm25_score": 0.0,
-                    "vector_score": normalized_score
-                }
-
-    # 计算混合分数
-    final_results = []
-    for r in result_map.values():
-        hybrid_score = r["bm25_score"] * bm25_weight + r["vector_score"] * vector_weight
-        final_results.append({
-            "content": r["content"],
-            "score": hybrid_score,
-            "file_name": r["file_name"],
-            "chunk_index": r["chunk_index"],
-            "bm25_score": r["bm25_score"],
-            "vector_score": r["vector_score"],
-            "search_type": "hybrid"
-        })
-
-    # 按混合分数排序并限制 top_k
-    final_results.sort(key=lambda x: x["score"], reverse=True)
-    final_results = final_results[:top_k]
-
-    logger.info(f"混合检索完成: 结果数={len(final_results)}")
     return final_results
 
 
