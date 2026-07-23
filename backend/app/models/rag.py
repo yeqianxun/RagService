@@ -7,7 +7,7 @@ from pgvector.sqlalchemy import Vector
 from app.models.base import Base, TimestampMixin
 from app.core.config import settings
 
-
+#
 
 class KnowledgeBase(Base, TimestampMixin):
     """知识库模型，存储知识库元数据"""
@@ -16,9 +16,9 @@ class KnowledgeBase(Base, TimestampMixin):
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
-    user_id: Mapped[int | None] = mapped_column(
-        ForeignKey("users.id", ondelete="SET NULL"),
-        nullable=True,
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
         index=True
     )
     is_public: Mapped[bool] = mapped_column(default=False, nullable=False)
@@ -45,11 +45,8 @@ class File(Base, TimestampMixin):
         nullable=False,
         index=True
     )
-
     filename: Mapped[str] = mapped_column(String(255), nullable=False)
     file_path: Mapped[str] = mapped_column(String(500), nullable=False)
-    file_size: Mapped[int] = mapped_column(Integer, nullable=False)
-    file_type: Mapped[str] = mapped_column(String(50), nullable=False)
     md5_hash: Mapped[str] = mapped_column(String(32), nullable=False)
     is_deleted: Mapped[bool] = mapped_column(default=False)
 
@@ -78,14 +75,13 @@ class DocumentChunk(Base, TimestampMixin):
     kb_id: Mapped[int] = mapped_column(
         ForeignKey("knowledge_bases.id", ondelete="CASCADE"),
         nullable=False,
-        index=False
+        index=True
     )
     chunk_index: Mapped[int] = mapped_column(Integer, nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
     embedding: Mapped[list[float]] = mapped_column(Vector(settings.EMBEDDING_DIMENSIONS), nullable=False)
     # SQLAlchemy default=dict 存在经典坑：类作用域单例共享字典，极端场景出现不同行互相污染数据。修复写法：使用 default=lambda: {}
     chunk_meta: Mapped[dict] = mapped_column(JSONB, nullable=False, default=lambda: {})
-    is_deleted: Mapped[bool] = mapped_column(default=False)
 
     # 关联关系
     file = relationship("File", back_populates="document_chunks")
@@ -93,10 +89,9 @@ class DocumentChunk(Base, TimestampMixin):
 
     __table_args__ = (
         UniqueConstraint("file_id", "chunk_index", name="uk_chunk_file_index"),
-        #  db.query(DocumentChunk)\
-        # .filter(DocumentChunk.kb_id == kb_id, DocumentChunk.is_deleted == False)\
-        # .order_by(DocumentChunk.embedding.cosine_distance(query_vec))\
-        # .limit(top_k)
+        # m	16	8-64	连接度，越大召回越高、内存越大
+        # ef_construction	64	32-200	构建质量，越大索引越好、构建越慢
+        # ef_search	40	20-200	查询精度，越大召回越高、查询越慢
         Index(
             "idx_chunk_embedding_cosine",
             "embedding",
@@ -107,7 +102,6 @@ class DocumentChunk(Base, TimestampMixin):
         # -- 查询当前用户、指定知识库、未删除的分块
         # SELECT * FROM document_chunks
         # kb_id = 10 AND is_deleted = false;
-        Index("idx_chunk_kb_del", "kb_id", "is_deleted"),
         # Index("idx_chunk_file_del", "file_id", "is_deleted"),
         # chunk_meta 是 JSONB 存储段落元数据：页码、来源、标题、页码等。
         # GIN 索引支持 JSON 内键值快速检索，例如：
